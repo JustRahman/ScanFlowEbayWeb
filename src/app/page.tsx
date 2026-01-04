@@ -422,7 +422,13 @@ export default function Home() {
                 <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0" strokeWidth={1.5} />
                 <div>
                   <p className="text-amber-700 dark:text-amber-300 font-medium">{featuredError}</p>
-                  <p className="text-amber-600 dark:text-amber-400 text-sm mt-1">You can still search for books manually above.</p>
+                  {featuredError.includes('rate limit') ? (
+                    <p className="text-amber-600 dark:text-amber-400 text-sm mt-1">API limit reached. Please wait a few minutes and refresh.</p>
+                  ) : featuredError.includes('credentials') || featuredError.includes('authentication') ? (
+                    <p className="text-amber-600 dark:text-amber-400 text-sm mt-1">Please check API configuration.</p>
+                  ) : (
+                    <p className="text-amber-600 dark:text-amber-400 text-sm mt-1">Please try again later.</p>
+                  )}
                 </div>
               </div>
             ) : featuredDeals.length > 0 ? (

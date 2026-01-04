@@ -226,6 +226,50 @@ function parseKeepaProduct(raw: KeepaProductRaw): KeepaProduct {
   };
 }
 
+/**
+ * Validate ISBN format (10 or 13 digits)
+ */
+export function validateIsbn(isbn: string): { valid: boolean; error?: string } {
+  const clean = isbn.replace(/[-\s]/g, '');
+
+  if (!clean) {
+    return { valid: false, error: 'ISBN is empty' };
+  }
+
+  if (!/^\d+X?$/i.test(clean)) {
+    return { valid: false, error: 'ISBN must contain only digits (and X for ISBN-10)' };
+  }
+
+  if (clean.length === 10) {
+    // ISBN-10 validation
+    let sum = 0;
+    for (let i = 0; i < 9; i++) {
+      sum += parseInt(clean[i], 10) * (10 - i);
+    }
+    const lastChar = clean[9].toUpperCase();
+    sum += lastChar === 'X' ? 10 : parseInt(lastChar, 10);
+    if (sum % 11 !== 0) {
+      return { valid: false, error: 'Invalid ISBN-10 checksum' };
+    }
+    return { valid: true };
+  }
+
+  if (clean.length === 13) {
+    // ISBN-13 validation
+    let sum = 0;
+    for (let i = 0; i < 12; i++) {
+      sum += parseInt(clean[i], 10) * (i % 2 === 0 ? 1 : 3);
+    }
+    const checkDigit = (10 - (sum % 10)) % 10;
+    if (checkDigit !== parseInt(clean[12], 10)) {
+      return { valid: false, error: 'Invalid ISBN-13 checksum' };
+    }
+    return { valid: true };
+  }
+
+  return { valid: false, error: `ISBN must be 10 or 13 digits (got ${clean.length})` };
+}
+
 export async function getProductByIsbn(isbn: string): Promise<KeepaProduct | null> {
   if (!KEEPA_API_KEY) {
     console.error('Keepa API key not configured');
@@ -233,6 +277,13 @@ export async function getProductByIsbn(isbn: string): Promise<KeepaProduct | nul
   }
 
   const cleanIsbn = isbn.replace(/[-\s]/g, '');
+
+  // Validate ISBN format
+  const validation = validateIsbn(cleanIsbn);
+  if (!validation.valid) {
+    console.error('Invalid ISBN:', validation.error);
+    return null;
+  }
   const url = `${KEEPA_API_BASE}/product?key=${KEEPA_API_KEY}&domain=1&code=${cleanIsbn}&stats=180&offers=20`;
 
   try {
