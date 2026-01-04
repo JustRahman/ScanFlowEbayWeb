@@ -216,7 +216,7 @@ export async function searchEbayListings(params: EbaySearchParams): Promise<Ebay
 
   const queryParams = new URLSearchParams({
     q: params.query,
-    limit: String(params.limit || 50),
+    limit: String(params.limit || 200),
     offset: String(params.offset || 0),
     fieldgroups: 'EXTENDED',
   });
@@ -355,7 +355,7 @@ export async function searchEbayBooks(query: string, options?: {
   return searchEbayListings({
     query,
     category_ids: '267',
-    limit: options?.limit || 50,
+    limit: options?.limit || 200,
     filter: filters.length > 0 ? filters.join(',') : undefined,
     sort: 'newlyListed',
   });

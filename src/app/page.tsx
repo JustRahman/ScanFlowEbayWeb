@@ -100,7 +100,7 @@ export default function Home() {
           sellers: selectedSellers,
           conditions: selectedConditions,
           maxPrice,
-          limit: 50,
+          limit: 200,
           fetchDetails: true,
         }),
       });

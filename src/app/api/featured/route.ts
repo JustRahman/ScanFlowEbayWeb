@@ -33,7 +33,7 @@ export async function GET() {
     const randomQuery = searchQueries[Math.floor(Math.random() * searchQueries.length)];
 
     const results = await searchEbayBooks(randomQuery, {
-      limit: 50,
+      limit: 200,
       maxPrice: 15,
       conditions: ['LIKE_NEW'],
       sellers: FEATURED_SELLERS,
