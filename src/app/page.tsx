@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Search, Filter, ExternalLink, BookOpen, Store, Tag, Loader2, AlertCircle, ChevronDown, X, ChevronRight, Sparkles, TrendingUp } from 'lucide-react';
+import { Search, Filter, ExternalLink, BookOpen, Store, Tag, Loader2, AlertCircle, ChevronDown, X, ChevronRight, Sparkles, TrendingUp, Database } from 'lucide-react';
 import Image from 'next/image';
 import { BookDetailModal } from '@/components/BookDetailModal';
 
@@ -31,22 +31,36 @@ interface Deal {
 interface SearchResponse {
   total: number;
   deals: Deal[];
+  categoryBreakdown?: Record<string, number>;
+  fetched?: number;
+  withIsbn?: number;
 }
 
 const SELLERS = [
-  { id: 'betterworldbooks', name: 'Better World Books' },
-  { id: 'booksrun', name: 'BooksRun' },
-  { id: 'hpb-red', name: 'Half Price Books' },
-  { id: 'thrift.books', name: 'ThriftBooks' },
-  { id: 'wonderbooks', name: 'Wonder Book' },
-  { id: 'alibrisbooks', name: 'Alibris' },
+  { id: 'oneplanetbooks', name: 'One Planet Books' },
 ];
 
 const CONDITIONS = [
-  { id: 'NEW', name: 'New' },
   { id: 'LIKE_NEW', name: 'Like New' },
-  { id: 'VERY_GOOD', name: 'Very Good' },
-  { id: 'GOOD', name: 'Good' },
+];
+
+const CATEGORIES = [
+  { id: '2228', name: 'Textbooks & Education' },
+  { id: '267', name: 'All Books' },
+  { id: '182964', name: 'Engineering' },
+  { id: '11769', name: 'Medicine & Health' },
+  { id: '465', name: 'Science & Mathematics' },
+  { id: '2256', name: 'Computers & Technology' },
+  { id: '3270', name: 'Business & Economics' },
+  { id: '11789', name: 'Law' },
+];
+
+// Categories to load progressively
+const LOAD_CATEGORIES = [
+  { id: '2228', name: 'Textbooks & Education', limit: 200 },
+  { id: '182964', name: 'Engineering', limit: 200 },
+  { id: '11769', name: 'Medicine & Health', limit: 200 },
+  { id: '465', name: 'Science & Mathematics', limit: 200 },
 ];
 
 export default function Home() {
@@ -56,37 +70,139 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
 
+  // Progressive loading state
+  const [loadingCategory, setLoadingCategory] = useState<string | null>(null);
+  const [categoryBreakdown, setCategoryBreakdown] = useState<Record<string, number>>({});
+  const [allDeals, setAllDeals] = useState<Deal[]>([]);
+
+  // Save stats
+  const [saveStats, setSaveStats] = useState<{ saved: number; duplicates: number; noIsbn: number }>({ saved: 0, duplicates: 0, noIsbn: 0 });
+
+  // Rate limit state
+  const [rateLimited, setRateLimited] = useState(false);
+
   // Featured books (loaded on mount)
   const [featuredDeals, setFeaturedDeals] = useState<Deal[]>([]);
-  const [featuredLoading, setFeaturedLoading] = useState(true);
+  const [featuredLoading, setFeaturedLoading] = useState(false);
   const [featuredError, setFeaturedError] = useState<string | null>(null);
 
   // Filters
   const [showFilters, setShowFilters] = useState(false);
-  const [selectedSellers, setSelectedSellers] = useState<string[]>(['betterworldbooks', 'booksrun']);
+  const [selectedSellers, setSelectedSellers] = useState<string[]>(['oneplanetbooks']);
   const [selectedConditions, setSelectedConditions] = useState<string[]>(['LIKE_NEW']);
-  const [maxPrice, setMaxPrice] = useState<number>(15);
+  const [selectedCategory, setSelectedCategory] = useState<string>('267');
+  const [minPrice, setMinPrice] = useState<number>(3);
+  const [maxPrice, setMaxPrice] = useState<number>(25);
 
-  // Load featured books on mount
+  // Bulk search
+  const [bulkLoading, setBulkLoading] = useState(false);
+
+  // Progressive loading on mount
   useEffect(() => {
-    async function loadFeatured() {
-      try {
-        const response = await fetch('/api/featured');
-        const data = await response.json();
-        if (response.ok) {
-          setFeaturedDeals(data.deals || []);
-          setFeaturedError(null);
-        } else {
-          setFeaturedError(data.error || 'Failed to load featured deals');
+    async function loadProgressively() {
+      setLoading(true);
+      setError(null);
+      setAllDeals([]);
+      setCategoryBreakdown({});
+      setSaveStats({ saved: 0, duplicates: 0, noIsbn: 0 });
+      setRateLimited(false);
+
+      for (const category of LOAD_CATEGORIES) {
+        setLoadingCategory(category.name);
+
+        try {
+          const response = await fetch('/api/ebay/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              query: '',
+              sellers: ['oneplanetbooks'],
+              conditions: ['LIKE_NEW'],
+              categoryId: category.id,
+              minPrice: 3,
+              maxPrice: 25,
+              limit: category.limit,
+              fetchDetails: true,
+            }),
+          });
+
+          const data = await response.json();
+
+          // Check for rate limit error
+          if (response.status === 429 || (data.error && data.error.includes('Rate limit'))) {
+            console.warn('eBay rate limited! Stopping fetch...');
+            setRateLimited(true);
+            setError('eBay rate limit reached. Showing partial results.');
+            break; // Stop fetching more categories
+          }
+
+          if (response.ok && data.deals) {
+            // Append new deals
+            setAllDeals(prev => [...prev, ...data.deals]);
+
+            // Update category breakdown
+            setCategoryBreakdown(prev => ({
+              ...prev,
+              [category.name]: data.deals.length,
+            }));
+
+            // Update results for display
+            setResults(prev => ({
+              total: (prev?.total || 0) + (data.total || 0),
+              deals: [...(prev?.deals || []), ...data.deals],
+              categoryBreakdown: {
+                ...(prev?.categoryBreakdown || {}),
+                [category.name]: data.deals.length,
+              },
+            }));
+
+            // Save books to database
+            const booksToSave = data.deals
+              .filter((deal: Deal) => deal.isbn)
+              .map((deal: Deal) => ({
+                isbn: deal.isbn,
+                title: deal.ebayTitle,
+                price: deal.ebayPrice,
+                condition: deal.ebayCondition,
+                seller: deal.ebaySeller,
+                category: category.name,
+                ebayItemId: deal.ebayItemId,
+                ebayUrl: deal.ebayUrl,
+                imageUrl: deal.ebayImage,
+                shipping: deal.ebayShipping,
+              }));
+
+            if (booksToSave.length > 0) {
+              try {
+                const saveResponse = await fetch('/api/books/save', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ books: booksToSave }),
+                });
+                const saveData = await saveResponse.json();
+
+                if (saveResponse.ok) {
+                  setSaveStats(prev => ({
+                    saved: prev.saved + (saveData.saved || 0),
+                    duplicates: prev.duplicates + (saveData.duplicates || 0),
+                    noIsbn: prev.noIsbn + (saveData.noIsbn || 0),
+                  }));
+                }
+              } catch (saveErr) {
+                console.error(`Failed to save ${category.name} books:`, saveErr);
+              }
+            }
+          }
+        } catch (err) {
+          console.error(`Failed to load ${category.name}:`, err);
         }
-      } catch (err) {
-        console.error('Failed to load featured books:', err);
-        setFeaturedError('Network error. Please check your connection.');
-      } finally {
-        setFeaturedLoading(false);
       }
+
+      setLoadingCategory(null);
+      setLoading(false);
     }
-    loadFeatured();
+
+    loadProgressively();
   }, []);
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -104,6 +220,8 @@ export default function Home() {
           query: query.trim(),
           sellers: selectedSellers,
           conditions: selectedConditions,
+          categoryId: selectedCategory,
+          minPrice,
           maxPrice,
           limit: 200,
           fetchDetails: true,
@@ -121,6 +239,37 @@ export default function Home() {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleBulkSearch = async () => {
+    setBulkLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch('/api/ebay/bulk-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: query.trim() || '',
+          sellers: selectedSellers,
+          conditions: selectedConditions,
+          minPrice,
+          maxPrice,
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Bulk search failed');
+      }
+
+      const data: SearchResponse = await response.json();
+      setResults(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    } finally {
+      setBulkLoading(false);
     }
   };
 
@@ -194,12 +343,44 @@ export default function Home() {
               )}
               <span className="hidden sm:inline">Search</span>
             </button>
+            <button
+              type="button"
+              onClick={handleBulkSearch}
+              disabled={bulkLoading}
+              className="px-6 py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+              title="Search all categories: 2K Textbooks, 1K Engineering, 1K Medicine, 1K Science"
+            >
+              {bulkLoading ? (
+                <Loader2 className="w-5 h-5 animate-spin" strokeWidth={1.5} />
+              ) : (
+                <Sparkles className="w-5 h-5" strokeWidth={1.5} />
+              )}
+              <span className="hidden sm:inline">Bulk Search</span>
+            </button>
           </div>
 
           {/* Filters Panel */}
           {showFilters && (
             <div className="mt-4 p-6 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-lg">
-              <div className="grid md:grid-cols-3 gap-6">
+              <div className="grid md:grid-cols-4 gap-6">
+                {/* Category */}
+                <div>
+                  <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-3">
+                    Category
+                  </label>
+                  <select
+                    value={selectedCategory}
+                    onChange={(e) => setSelectedCategory(e.target.value)}
+                    className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg text-neutral-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 dark:focus:ring-white"
+                  >
+                    {CATEGORIES.map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 {/* Sellers */}
                 <div>
                   <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-3">
@@ -272,19 +453,35 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* Max Price */}
+                {/* Price Range */}
                 <div>
                   <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-3">
-                    Max Price: ${maxPrice}
+                    Price: ${minPrice} - ${maxPrice}
                   </label>
-                  <input
-                    type="range"
-                    min={1}
-                    max={50}
-                    value={maxPrice}
-                    onChange={(e) => setMaxPrice(Number(e.target.value))}
-                    className="w-full h-2 bg-neutral-200 dark:bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-neutral-900 dark:accent-white"
-                  />
+                  <div className="space-y-3">
+                    <div>
+                      <span className="text-xs text-neutral-400">Min: ${minPrice}</span>
+                      <input
+                        type="range"
+                        min={1}
+                        max={20}
+                        value={minPrice}
+                        onChange={(e) => setMinPrice(Math.min(Number(e.target.value), maxPrice - 1))}
+                        className="w-full h-2 bg-neutral-200 dark:bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-neutral-900 dark:accent-white"
+                      />
+                    </div>
+                    <div>
+                      <span className="text-xs text-neutral-400">Max: ${maxPrice}</span>
+                      <input
+                        type="range"
+                        min={1}
+                        max={50}
+                        value={maxPrice}
+                        onChange={(e) => setMaxPrice(Math.max(Number(e.target.value), minPrice + 1))}
+                        className="w-full h-2 bg-neutral-200 dark:bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-neutral-900 dark:accent-white"
+                      />
+                    </div>
+                  </div>
                   <div className="flex justify-between mt-2 text-xs text-neutral-400">
                     <span>$1</span>
                     <span>$50</span>
@@ -307,19 +504,72 @@ export default function Home() {
         )}
 
         {/* Results */}
-        {results && (
+        {(results || loading) && (
           <div>
-            <div className="flex items-center justify-between mb-6">
-              <p className="text-neutral-600 dark:text-neutral-400">
-                Found <span className="font-semibold text-neutral-900 dark:text-white">{results.total.toLocaleString()}</span> listings
-              </p>
+            <div className="flex flex-col gap-2 mb-6">
+              <div className="flex items-center justify-between">
+                <p className="text-neutral-600 dark:text-neutral-400">
+                  {results ? (
+                    <>
+                      Found <span className="font-semibold text-neutral-900 dark:text-white">{results.deals.length.toLocaleString()}</span> books
+                      {loadingCategory && <span className="text-amber-500 ml-2">(loading more...)</span>}
+                    </>
+                  ) : (
+                    <span className="text-amber-500">Starting search...</span>
+                  )}
+                </p>
+              </div>
+              {/* Loading indicator */}
+              {loadingCategory && (
+                <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span className="text-sm">Loading {loadingCategory}...</span>
+                </div>
+              )}
+              {/* Save stats */}
+              {(saveStats.saved > 0 || saveStats.duplicates > 0) && (
+                <div className="flex items-center gap-3 text-sm">
+                  <Database className="w-4 h-4 text-emerald-500" />
+                  <span className="text-emerald-600 dark:text-emerald-400">
+                    {saveStats.saved} saved
+                  </span>
+                  {saveStats.duplicates > 0 && (
+                    <span className="text-neutral-400">
+                      ({saveStats.duplicates} duplicates)
+                    </span>
+                  )}
+                </div>
+              )}
+              {/* Rate limit warning */}
+              {rateLimited && (
+                <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+                  <AlertCircle className="w-4 h-4" />
+                  <span className="text-sm">Rate limited - showing partial results</span>
+                </div>
+              )}
+              {results?.categoryBreakdown && Object.keys(results.categoryBreakdown).length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {Object.entries(results.categoryBreakdown).map(([category, count]) => (
+                    <span key={category} className="px-2 py-1 text-xs bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 rounded">
+                      {category}: {count}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
 
-            {results.deals.length === 0 ? (
-              <div className="text-center py-16 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-lg">
-                <BookOpen className="w-12 h-12 text-neutral-300 dark:text-neutral-600 mx-auto mb-4" strokeWidth={1} />
-                <p className="text-neutral-500">No books found. Try a different search.</p>
-              </div>
+            {!results || results.deals.length === 0 ? (
+              loading ? (
+                <div className="text-center py-16 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-lg">
+                  <Loader2 className="w-12 h-12 text-amber-500 mx-auto mb-4 animate-spin" strokeWidth={1.5} />
+                  <p className="text-neutral-500">Loading books from {loadingCategory || 'eBay'}...</p>
+                </div>
+              ) : (
+                <div className="text-center py-16 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-lg">
+                  <BookOpen className="w-12 h-12 text-neutral-300 dark:text-neutral-600 mx-auto mb-4" strokeWidth={1} />
+                  <p className="text-neutral-500">No books found. Try a different search.</p>
+                </div>
+              )
             ) : (
               <div className="grid gap-4">
                 {results.deals.map((deal) => (
@@ -398,6 +648,14 @@ export default function Home() {
                     </div>
                   </div>
                 ))}
+
+                {/* Loading more indicator at bottom */}
+                {loadingCategory && (
+                  <div className="flex items-center justify-center gap-3 py-8 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-lg">
+                    <Loader2 className="w-6 h-6 text-amber-500 animate-spin" strokeWidth={1.5} />
+                    <p className="text-neutral-500">Loading {loadingCategory}...</p>
+                  </div>
+                )}
               </div>
             )}
           </div>

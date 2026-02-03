@@ -9,6 +9,16 @@ const EBAY_API_BASE = 'https://api.ebay.com';
 const EBAY_OAUTH_URL = `${EBAY_API_BASE}/identity/v1/oauth2/token`;
 const EBAY_BROWSE_URL = `${EBAY_API_BASE}/buy/browse/v1`;
 
+// Logging helper
+function log(message: string, data?: unknown) {
+  const timestamp = new Date().toISOString();
+  if (data !== undefined) {
+    console.log(`[${timestamp}] [eBay] ${message}`, JSON.stringify(data, null, 2));
+  } else {
+    console.log(`[${timestamp}] [eBay] ${message}`);
+  }
+}
+
 // Client credentials from environment (server-side only)
 const CLIENT_ID = process.env.EBAY_CLIENT_ID || '';
 const CLIENT_SECRET = process.env.EBAY_CLIENT_SECRET || '';
@@ -150,8 +160,11 @@ async function fetchWithRetry(
       const response = await fetch(url, options);
 
       if (response.status === 429) {
+        log(`RATE LIMITED (429) - attempt ${attempt + 1}/${RATE_LIMIT_CONFIG.maxRetries + 1}`);
+
         if (attempt === RATE_LIMIT_CONFIG.maxRetries) {
-          throw new Error(`${context}: Rate limit exceeded after ${RATE_LIMIT_CONFIG.maxRetries} retries`);
+          log('RATE LIMIT EXCEEDED - stopping');
+          throw new Error(`Rate limit exceeded`);
         }
 
         const retryAfter = response.headers.get('Retry-After');
@@ -165,7 +178,7 @@ async function fetchWithRetry(
         }
 
         waitTime = Math.min(waitTime, RATE_LIMIT_CONFIG.maxDelayMs);
-        console.warn(`${context}: Rate limited (429). Waiting ${waitTime}ms...`);
+        log(`Waiting ${waitTime}ms before retry...`);
 
         await sleep(waitTime);
         delay = Math.min(delay * RATE_LIMIT_CONFIG.backoffMultiplier, RATE_LIMIT_CONFIG.maxDelayMs);
@@ -228,7 +241,7 @@ async function getAccessToken(): Promise<string> {
         return cachedToken.access_token;
       }
 
-      console.log('Fetching new eBay OAuth token...');
+      log('Fetching new OAuth token...');
       const credentials = Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString('base64');
 
       const response = await fetchWithRetry(
@@ -252,7 +265,7 @@ async function getAccessToken(): Promise<string> {
       }
 
       const token: OAuthToken = await response.json();
-      console.log('eBay OAuth token obtained, expires in:', token.expires_in, 'seconds');
+      log(`OAuth token obtained, expires in ${token.expires_in}s`);
       cachedToken = token;
       tokenExpiresAt = Date.now() + (token.expires_in * 1000);
 
@@ -315,9 +328,11 @@ export async function getEbayItem(itemId: string): Promise<EbayItemSummary | nul
   const cacheKey = `item:${itemId}`;
   const cached = getCachedItem<EbayItemSummary>(cacheKey);
   if (cached) {
+    log(`ITEM CACHE HIT: ${itemId}`);
     return cached;
   }
 
+  log(`ITEM FETCH: ${itemId}`);
   const accessToken = await getAccessToken();
   const url = `${EBAY_BROWSE_URL}/item/${itemId}`;
 
@@ -344,26 +359,25 @@ export async function getEbayItem(itemId: string): Promise<EbayItemSummary | nul
   // Cache the result
   setCachedItem(cacheKey, item);
 
+  const isbn = extractISBN(item);
+  log(`ITEM FETCHED: ${itemId}`, {
+    title: item.title?.substring(0, 50),
+    isbn: isbn || 'NOT FOUND',
+    price: item.price?.value,
+  });
+
   return item;
 }
 
 // Book wholesale sellers
 export const ALL_BOOK_SELLERS = [
-  { id: 'betterworldbooks', name: 'Better World Books' },
-  { id: 'booksrun', name: 'BooksRun' },
-  { id: 'hpb-red', name: 'Half Price Books' },
-  { id: 'thrift.books', name: 'ThriftBooks' },
-  { id: 'thriftbooksstore', name: 'ThriftBooks Store' },
   { id: 'oneplanetbooks', name: 'One Planet Books' },
-  { id: 'wonderbooks', name: 'Wonder Book' },
-  { id: 'bookoutlet2', name: 'Book Outlet' },
-  { id: 'alibrisbooks', name: 'Alibris' },
 ];
 
 // Featured sellers for auto-search
-export const FEATURED_SELLERS = ['betterworldbooks', 'booksrun', 'oneplanetbooks', 'thriftbooksstore'];
+export const FEATURED_SELLERS = ['oneplanetbooks'];
 
-export const DEFAULT_SELLERS = ['betterworldbooks', 'booksrun'];
+export const DEFAULT_SELLERS = ['oneplanetbooks'];
 
 export const BOOK_CONDITIONS: Record<string, string> = {
   'NEW': '1000',
@@ -385,19 +399,109 @@ export const DEFAULT_CONDITIONS = ['LIKE_NEW'];
 
 export type BookCondition = 'NEW' | 'LIKE_NEW' | 'VERY_GOOD' | 'GOOD' | 'ACCEPTABLE';
 
+// Book subcategories (under main Books category 267)
+export const BOOK_CATEGORIES = [
+  { id: '2228', name: 'Textbooks & Education', limit: 2000 },
+  { id: '182964', name: 'Engineering', limit: 1000 },
+  { id: '11769', name: 'Medicine & Health', limit: 1000 },
+  { id: '465', name: 'Science & Mathematics', limit: 1000 },
+];
+
+export const DEFAULT_CATEGORY = '2228'; // Textbooks, Education
+
+// Search all configured categories and combine results with pagination
+export async function searchAllCategories(query: string, options?: {
+  minPrice?: number;
+  maxPrice?: number;
+  conditions?: BookCondition[];
+  sellers?: string[];
+}): Promise<{ items: EbayItemSummary[]; total: number; categoryBreakdown: Record<string, number> }> {
+  const allItems: EbayItemSummary[] = [];
+  let totalCount = 0;
+  const categoryBreakdown: Record<string, number> = {};
+  const PAGE_SIZE = 200; // eBay API max per request
+
+  // Search each category with pagination to reach configured limit
+  for (const category of BOOK_CATEGORIES) {
+    const categoryItems: EbayItemSummary[] = [];
+    let offset = 0;
+
+    try {
+      console.log(`Searching ${category.name} (target: ${category.limit})...`);
+
+      // Fetch pages until we reach the limit or run out of results
+      while (categoryItems.length < category.limit) {
+        const results = await searchEbayBooks(query, {
+          ...options,
+          categoryId: category.id,
+          limit: PAGE_SIZE,
+          offset: offset,
+        });
+
+        if (!results.itemSummaries || results.itemSummaries.length === 0) {
+          break; // No more results
+        }
+
+        categoryItems.push(...results.itemSummaries);
+        totalCount += results.total || 0;
+
+        // Check if we've fetched all available or reached our limit
+        if (results.itemSummaries.length < PAGE_SIZE || categoryItems.length >= category.limit) {
+          break;
+        }
+
+        offset += PAGE_SIZE;
+
+        // Add small delay to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+
+      // Trim to exact limit
+      const trimmedItems = categoryItems.slice(0, category.limit);
+      allItems.push(...trimmedItems);
+      categoryBreakdown[category.name] = trimmedItems.length;
+
+      console.log(`${category.name}: fetched ${trimmedItems.length} items`);
+    } catch (error) {
+      console.error(`Error searching ${category.name}:`, error);
+      categoryBreakdown[category.name] = categoryItems.length;
+    }
+  }
+
+  return { items: allItems, total: totalCount, categoryBreakdown };
+}
+
 /**
  * Search for books (category 267)
+ * Filter order matches script: sellers, price, priceCurrency, conditionIds, buyingOptions, itemCreationDate
  */
 export async function searchEbayBooks(query: string, options?: {
   limit?: number;
+  offset?: number;
   minPrice?: number;
   maxPrice?: number;
   conditions?: BookCondition[];
   sellers?: string[];
   maxListingAgeDays?: number;
+  categoryId?: string;
 }): Promise<EbaySearchResponse> {
+  log(`SEARCH START`, {
+    query,
+    sellers: options?.sellers,
+    conditions: options?.conditions,
+    priceRange: `$${options?.minPrice || 0}-$${options?.maxPrice || 'unlimited'}`,
+    category: options?.categoryId || DEFAULT_CATEGORY,
+    limit: options?.limit || 200,
+  });
+
   const filters: string[] = [];
 
+  // 1. Sellers filter (first, as per script)
+  if (options?.sellers && options.sellers.length > 0) {
+    filters.push(`sellers:{${options.sellers.join('|')}}`);
+  }
+
+  // 2. Price filter
   if (options?.minPrice && options?.maxPrice && options.maxPrice < 100000) {
     filters.push(`price:[${options.minPrice}..${options.maxPrice}]`);
   } else if (options?.minPrice) {
@@ -406,30 +510,43 @@ export async function searchEbayBooks(query: string, options?: {
     filters.push(`price:[..${options.maxPrice}]`);
   }
 
+  // 3. Price currency (required for consistency)
+  filters.push('priceCurrency:USD');
+
+  // 4. Condition filter
   if (options?.conditions && options.conditions.length > 0) {
     const conditionIds = options.conditions.map(c => BOOK_CONDITIONS[c]).join('|');
     filters.push(`conditionIds:{${conditionIds}}`);
   }
 
-  if (options?.sellers && options.sellers.length > 0) {
-    filters.push(`sellers:{${options.sellers.join('|')}}`);
-  }
+  // 5. Fixed price only
+  filters.push('buyingOptions:{FIXED_PRICE}');
 
-  if (options?.maxListingAgeDays && options.maxListingAgeDays > 0) {
+  // 6. Listing age filter (default: 30 days)
+  const maxAgeDays = options?.maxListingAgeDays ?? 30;
+  if (maxAgeDays > 0) {
     const minDate = new Date();
-    minDate.setDate(minDate.getDate() - options.maxListingAgeDays);
+    minDate.setDate(minDate.getDate() - maxAgeDays);
     filters.push(`itemCreationDate:[${minDate.toISOString()}]`);
   }
 
-  filters.push('buyingOptions:{FIXED_PRICE}');
+  log(`FILTER: ${filters.join(',')}`);
 
-  return searchEbayListings({
+  const results = await searchEbayListings({
     query,
-    category_ids: '267',
+    category_ids: options?.categoryId || DEFAULT_CATEGORY,
     limit: options?.limit || 200,
+    offset: options?.offset || 0,
     filter: filters.length > 0 ? filters.join(',') : undefined,
     sort: 'newlyListed',
   });
+
+  log(`SEARCH RESULT`, {
+    total: results.total,
+    returned: results.itemSummaries?.length || 0,
+  });
+
+  return results;
 }
 
 /**

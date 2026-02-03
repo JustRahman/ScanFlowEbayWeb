@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { searchEbayBooks, getEbayItem, extractISBN, convertToDeal, FEATURED_SELLERS } from '@/services/ebayApi';
+import { searchEbayBooks, getEbayItem, extractISBN, convertToDeal, FEATURED_SELLERS, DEFAULT_CATEGORY } from '@/services/ebayApi';
 import { getProductByIsbn, calculateFees, makeDecision } from '@/services/keepaApi';
 
 interface FeaturedDeal {
@@ -34,10 +34,12 @@ export async function GET() {
 
     const results = await searchEbayBooks(randomQuery, {
       limit: 200,
-      maxPrice: 15,
-      conditions: ['LIKE_NEW'],
+      minPrice: 3,
+      maxPrice: 20,
+      conditions: ['VERY_GOOD'],
       sellers: FEATURED_SELLERS,
       maxListingAgeDays: 20,
+      categoryId: DEFAULT_CATEGORY,
     });
 
     if (!results.itemSummaries || results.itemSummaries.length === 0) {
