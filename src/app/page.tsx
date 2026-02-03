@@ -66,7 +66,7 @@ const LOAD_CATEGORIES = [
 export default function Home() {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResponse | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true); // Start with loading=true since we auto-load
   const [error, setError] = useState<string | null>(null);
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
 
@@ -195,6 +195,8 @@ export default function Home() {
           }
         } catch (err) {
           console.error(`Failed to load ${category.name}:`, err);
+          setError(`Failed to load ${category.name}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+          break; // Stop on error
         }
       }
 
