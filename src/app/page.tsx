@@ -1,806 +1,594 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Search, Filter, ExternalLink, BookOpen, Store, Tag, Loader2, AlertCircle, ChevronDown, X, ChevronRight, Sparkles, TrendingUp, Database } from 'lucide-react';
-import Image from 'next/image';
-import { BookDetailModal } from '@/components/BookDetailModal';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 
-interface Deal {
-  ebayItemId: string;
-  ebayTitle: string;
-  ebayPrice: number;
-  ebayUrl: string;
-  ebayCondition: string;
-  ebaySeller: string;
-  ebaySellerRating: number | null;
-  ebayImage: string | null;
-  ebayShipping: number;
-  isbn: string | null;
-  // Optional Amazon data (for featured deals)
-  asin?: string;
-  buyBoxPrice?: number;
-  salesRank?: number | null;
-  salesRankDrops30?: number | null;
-  fbaProfit?: number;
-  fbmProfit?: number;
-  fbaRoi?: number;
-  decision?: 'BUY' | 'REVIEW' | 'REJECT';
-  score?: number;
+// Direct Supabase REST API — same approach as ScanFlow-ScapWeb
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const TABLE = 'ebay_books';
+const HEADERS = {
+  'apikey': SUPABASE_KEY,
+  'Authorization': `Bearer ${SUPABASE_KEY}`,
+};
+
+type Seller = 'booksrun' | 'oneplanetbooks';
+type DecisionFilter = 'all' | 'BUY' | 'REVIEW' | 'REJECT';
+type PriceFilter = 'all' | '0-5' | '5-10' | '10-20' | '20+';
+type FormatFilter = 'all' | 'Paperback' | 'Hardcover';
+type WeightFilter = 'all' | '0-5' | '5-10' | '10-20' | '20+';
+
+interface Book {
+  id: number;
+  isbn: string;
+  title: string;
+  price: number;
+  condition: string;
+  seller: string;
+  category: string;
+  ebay_item_id: string;
+  ebay_url: string;
+  image_url: string | null;
+  shipping: number;
+  scraped_at: string;
+  decision: string | null;
+  asin: string | null;
+  amazon_price: number | null;
+  sales_rank: number | null;
+  sales_rank_drops_30: number | null;
+  sales_rank_drops_90: number | null;
+  fba_profit: number | null;
+  fbm_profit: number | null;
+  fba_roi: number | null;
+  score: number | null;
+  amazon_flag: string | null;
+  book_type: string | null;
+  weight_oz: number | null;
+  evaluated_at: string | null;
+  bought_at: string | null;
 }
 
-interface SearchResponse {
-  total: number;
-  deals: Deal[];
-  categoryBreakdown?: Record<string, number>;
-  fetched?: number;
-  withIsbn?: number;
-}
-
-const SELLERS = [
-  { id: 'oneplanetbooks', name: 'One Planet Books' },
-];
-
-const CONDITIONS = [
-  { id: 'LIKE_NEW', name: 'Like New' },
-];
-
-const CATEGORIES = [
-  { id: '2228', name: 'Textbooks & Education' },
-  { id: '267', name: 'All Books' },
-  { id: '182964', name: 'Engineering' },
-  { id: '11769', name: 'Medicine & Health' },
-  { id: '465', name: 'Science & Mathematics' },
-  { id: '2256', name: 'Computers & Technology' },
-  { id: '3270', name: 'Business & Economics' },
-  { id: '11789', name: 'Law' },
-];
-
-// Categories to load progressively
-const LOAD_CATEGORIES = [
-  { id: '2228', name: 'Textbooks & Education', limit: 200 },
-  { id: '182964', name: 'Engineering', limit: 200 },
-  { id: '11769', name: 'Medicine & Health', limit: 200 },
-  { id: '465', name: 'Science & Mathematics', limit: 200 },
+const SELLERS: { id: Seller; label: string }[] = [
+  { id: 'booksrun', label: 'BooksRun' },
+  { id: 'oneplanetbooks', label: 'OnePlanetBooks' },
 ];
 
 export default function Home() {
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState<SearchResponse | null>(null);
-  const [loading, setLoading] = useState(true); // Start with loading=true since we auto-load
-  const [error, setError] = useState<string | null>(null);
-  const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
-
-  // Progressive loading state
-  const [loadingCategory, setLoadingCategory] = useState<string | null>(null);
-  const [categoryBreakdown, setCategoryBreakdown] = useState<Record<string, number>>({});
-  const [allDeals, setAllDeals] = useState<Deal[]>([]);
-
-  // Save stats
-  const [saveStats, setSaveStats] = useState<{ saved: number; duplicates: number; noIsbn: number }>({ saved: 0, duplicates: 0, noIsbn: 0 });
-
-  // Rate limit state
-  const [rateLimited, setRateLimited] = useState(false);
-
-  // Featured books (loaded on mount)
-  const [featuredDeals, setFeaturedDeals] = useState<Deal[]>([]);
-  const [featuredLoading, setFeaturedLoading] = useState(false);
-  const [featuredError, setFeaturedError] = useState<string | null>(null);
+  const [allBooks, setAllBooks] = useState<Book[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeSeller, setActiveSeller] = useState<Seller>('booksrun');
 
   // Filters
-  const [showFilters, setShowFilters] = useState(false);
-  const [selectedSellers, setSelectedSellers] = useState<string[]>(['oneplanetbooks']);
-  const [selectedConditions, setSelectedConditions] = useState<string[]>(['LIKE_NEW']);
-  const [selectedCategory, setSelectedCategory] = useState<string>('267');
-  const [minPrice, setMinPrice] = useState<number>(3);
-  const [maxPrice, setMaxPrice] = useState<number>(25);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [decisionFilter, setDecisionFilter] = useState<DecisionFilter>('BUY');
+  const [priceFilters, setPriceFilters] = useState<PriceFilter[]>(['all']);
+  const [formatFilter, setFormatFilter] = useState<FormatFilter>('all');
+  const [weightFilter, setWeightFilter] = useState<WeightFilter>('all');
+  const [minProfit, setMinProfit] = useState('');
+  const [minRoi, setMinRoi] = useState('');
+  const [hasanFilter, setHasanFilter] = useState(true);
 
-  // Bulk search
-  const [bulkLoading, setBulkLoading] = useState(false);
+  // Store all books per seller for counts
+  const [allBooksrun, setAllBooksrun] = useState<Book[]>([]);
+  const [allOneplanet, setAllOneplanet] = useState<Book[]>([]);
 
-  // Progressive loading on mount
+  // ── Fetch ALL books for a seller with pagination (1000 per page) ──
+  const fetchAllBooksForSeller = useCallback(async (seller: string): Promise<Book[]> => {
+    const PAGE_SIZE = 1000;
+    const allResults: Book[] = [];
+    let offset = 0;
+
+    try {
+      while (true) {
+        const url = `${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc&seller=eq.${seller}`;
+        const response = await fetch(url, {
+          headers: { ...HEADERS, 'Range': `${offset}-${offset + PAGE_SIZE - 1}` }
+        });
+        if (!response.ok) break;
+        const page: Book[] = await response.json();
+        allResults.push(...page);
+        if (page.length < PAGE_SIZE) break; // last page
+        offset += PAGE_SIZE;
+      }
+      return allResults;
+    } catch (error) {
+      console.error(`Error fetching ${seller}:`, error);
+      return allResults; // return whatever we got so far
+    }
+  }, []);
+
+  // ── Load both sellers on mount ──
   useEffect(() => {
-    async function loadProgressively() {
+    async function loadAll() {
       setLoading(true);
-      setError(null);
-      setAllDeals([]);
-      setCategoryBreakdown({});
-      setSaveStats({ saved: 0, duplicates: 0, noIsbn: 0 });
-      setRateLimited(false);
+      const [br, op] = await Promise.all([
+        fetchAllBooksForSeller('booksrun'),
+        fetchAllBooksForSeller('oneplanetbooks'),
+      ]);
+      setAllBooksrun(br);
+      setAllOneplanet(op);
+      // Set active seller's books
+      setAllBooks(br); // default is booksrun
+      setLoading(false);
+    }
+    loadAll();
+  }, [fetchAllBooksForSeller]);
 
-      for (const category of LOAD_CATEGORIES) {
-        setLoadingCategory(category.name);
+  // ── Switch seller: use cached data ──
+  useEffect(() => {
+    setAllBooks(activeSeller === 'booksrun' ? allBooksrun : allOneplanet);
+  }, [activeSeller, allBooksrun, allOneplanet]);
 
-        try {
-          const response = await fetch('/api/ebay/search', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              query: '',
-              sellers: ['oneplanetbooks'],
-              conditions: ['LIKE_NEW'],
-              categoryId: category.id,
-              minPrice: 3,
-              maxPrice: 25,
-              limit: category.limit,
-              fetchDetails: true,
-            }),
-          });
+  // ── Seller counts (BUY count for each) ──
+  const sellerCounts = useMemo(() => ({
+    booksrun: allBooksrun.filter(b => b.decision === 'BUY').length,
+    oneplanetbooks: allOneplanet.filter(b => b.decision === 'BUY').length,
+  }), [allBooksrun, allOneplanet]);
 
-          const data = await response.json();
+  // ── Stats (computed from all books for active seller) ──
+  const stats = useMemo(() => {
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    return {
+      total: allBooks.length,
+      buy: allBooks.filter(b => b.decision === 'BUY').length,
+      review: allBooks.filter(b => b.decision === 'REVIEW').length,
+      reject: allBooks.filter(b => b.decision === 'REJECT').length,
+      bought: allBooks.filter(b => b.decision === 'BOUGHT').length,
+      today: allBooks.filter(b => b.bought_at && b.bought_at >= twentyFourHoursAgo).length,
+    };
+  }, [allBooks]);
 
-          // Check for rate limit error
-          if (response.status === 429 || (data.error && data.error.includes('Rate limit'))) {
-            console.warn('eBay rate limited! Stopping fetch...');
-            setRateLimited(true);
-            setError('eBay rate limit reached. Showing partial results.');
-            break; // Stop fetching more categories
-          }
+  // ── Client-side filtering (decision + all other filters) ──
+  const filteredBooks = useMemo(() => {
+    return allBooks.filter(book => {
+      // Decision filter (was server-side, now client-side)
+      if (decisionFilter !== 'all' && book.decision !== decisionFilter) return false;
 
-          if (response.ok && data.deals) {
-            // Append new deals
-            setAllDeals(prev => [...prev, ...data.deals]);
+      // Search
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        if (!book.title.toLowerCase().includes(q) && !book.isbn.includes(q)) return false;
+      }
 
-            // Update category breakdown
-            setCategoryBreakdown(prev => ({
-              ...prev,
-              [category.name]: data.deals.length,
-            }));
+      // Price filter (multi-select)
+      const buyPrice = book.price / 100;
+      if (!priceFilters.includes('all')) {
+        let matchesPrice = false;
+        if (priceFilters.includes('0-5') && buyPrice < 5) matchesPrice = true;
+        if (priceFilters.includes('5-10') && buyPrice >= 5 && buyPrice < 10) matchesPrice = true;
+        if (priceFilters.includes('10-20') && buyPrice >= 10 && buyPrice < 20) matchesPrice = true;
+        if (priceFilters.includes('20+') && buyPrice >= 20) matchesPrice = true;
+        if (!matchesPrice) return false;
+      }
 
-            // Update results for display
-            setResults(prev => ({
-              total: (prev?.total || 0) + (data.total || 0),
-              deals: [...(prev?.deals || []), ...data.deals],
-              categoryBreakdown: {
-                ...(prev?.categoryBreakdown || {}),
-                [category.name]: data.deals.length,
-              },
-            }));
+      // Format filter
+      if (formatFilter !== 'all') {
+        const bookFormat = book.book_type || '';
+        if (formatFilter === 'Paperback' && !bookFormat.toLowerCase().includes('paper') && !bookFormat.toLowerCase().includes('soft')) return false;
+        if (formatFilter === 'Hardcover' && !bookFormat.toLowerCase().includes('hard')) return false;
+      }
 
-            // Save books to database
-            const booksToSave = data.deals
-              .filter((deal: Deal) => deal.isbn)
-              .map((deal: Deal) => ({
-                isbn: deal.isbn,
-                title: deal.ebayTitle,
-                price: deal.ebayPrice,
-                condition: deal.ebayCondition,
-                seller: deal.ebaySeller,
-                category: category.name,
-                ebayItemId: deal.ebayItemId,
-                ebayUrl: deal.ebayUrl,
-                imageUrl: deal.ebayImage,
-                shipping: deal.ebayShipping,
-              }));
+      // Weight filter (oz → lbs)
+      if (weightFilter !== 'all') {
+        const weightLbs = book.weight_oz ? book.weight_oz / 16 : 0;
+        if (weightFilter === '0-5' && !(weightLbs > 0 && weightLbs < 5)) return false;
+        if (weightFilter === '5-10' && !(weightLbs >= 5 && weightLbs < 10)) return false;
+        if (weightFilter === '10-20' && !(weightLbs >= 10 && weightLbs < 20)) return false;
+        if (weightFilter === '20+' && !(weightLbs >= 20)) return false;
+      }
 
-            if (booksToSave.length > 0) {
-              try {
-                const saveResponse = await fetch('/api/books/save', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ books: booksToSave }),
-                });
-                const saveData = await saveResponse.json();
+      // Min profit
+      if (minProfit) {
+        const v = parseFloat(minProfit);
+        if (!isNaN(v) && (book.fbm_profit == null || book.fbm_profit / 100 < v)) return false;
+      }
 
-                if (saveResponse.ok) {
-                  setSaveStats(prev => ({
-                    saved: prev.saved + (saveData.saved || 0),
-                    duplicates: prev.duplicates + (saveData.duplicates || 0),
-                    noIsbn: prev.noIsbn + (saveData.noIsbn || 0),
-                  }));
-                }
-              } catch (saveErr) {
-                console.error(`Failed to save ${category.name} books:`, saveErr);
-              }
-            }
-          }
-        } catch (err) {
-          console.error(`Failed to load ${category.name}:`, err);
-          setError(`Failed to load ${category.name}: ${err instanceof Error ? err.message : 'Unknown error'}`);
-          break; // Stop on error
+      // ROI range (e.g. 7 means 7.0x-7.9x)
+      if (minRoi) {
+        const val = parseFloat(minRoi.replace(/x$/i, ''));
+        if (!isNaN(val)) {
+          const roi = book.amazon_price && book.price > 0 ? book.amazon_price / book.price : 0;
+          if (roi < val || roi >= val + 1) return false;
         }
       }
 
-      setLoadingCategory(null);
-      setLoading(false);
-    }
-
-    loadProgressively();
-  }, []);
-
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!query.trim()) return;
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetch('/api/ebay/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: query.trim(),
-          sellers: selectedSellers,
-          conditions: selectedConditions,
-          categoryId: selectedCategory,
-          minPrice,
-          maxPrice,
-          limit: 200,
-          fetchDetails: true,
-        }),
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Search failed');
+      // Hasan Filter: 5x+ ROI AND $30+ Amazon price
+      if (hasanFilter) {
+        const roi = book.amazon_price && book.price > 0 ? book.amazon_price / book.price : 0;
+        const amazonDollars = book.amazon_price ? book.amazon_price / 100 : 0;
+        if (roi < 5 || amazonDollars < 30) return false;
       }
 
-      const data: SearchResponse = await response.json();
-      setResults(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
-    } finally {
-      setLoading(false);
-    }
-  };
+      return true;
+    });
+  }, [allBooks, decisionFilter, searchQuery, priceFilters, formatFilter, weightFilter, minProfit, minRoi, hasanFilter]);
 
-  const handleBulkSearch = async () => {
-    setBulkLoading(true);
-    setError(null);
+  // ── Action handler (direct PATCH to Supabase) ──
+  async function handleAction(bookId: number, action: 'BOUGHT' | 'REJECT', buttonElement: HTMLButtonElement) {
+    const card = buttonElement.closest('.book-card') as HTMLElement;
+    if (!card) return;
+
+    const buttons = card.querySelectorAll<HTMLButtonElement>('.action-btn');
+    buttons.forEach(btn => btn.disabled = true);
+    buttonElement.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="animation: spin 1s linear infinite;"><path d="M12 2v4m0 12v4m10-10h-4M6 12H2m15.07-5.07l-2.83 2.83M8.76 15.24l-2.83 2.83m11.31 0l-2.83-2.83M8.76 8.76L5.93 5.93"/></svg>';
 
     try {
-      const response = await fetch('/api/ebay/bulk-search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: query.trim() || '',
-          sellers: selectedSellers,
-          conditions: selectedConditions,
-          minPrice,
-          maxPrice,
-        }),
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Bulk search failed');
+      const updateData: Record<string, string> = { decision: action };
+      if (action === 'BOUGHT') {
+        updateData.bought_at = new Date().toISOString();
       }
 
-      const data: SearchResponse = await response.json();
-      setResults(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
-    } finally {
-      setBulkLoading(false);
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?id=eq.${bookId}`, {
+        method: 'PATCH',
+        headers: {
+          ...HEADERS,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify(updateData)
+      });
+
+      if (!response.ok) throw new Error('Failed to update');
+
+      card.classList.add('removing');
+
+      // Remove from both the active list and the cached seller list
+      const removeBook = (books: Book[]) => books.filter(b => b.id !== bookId);
+      setAllBooks(removeBook);
+      if (activeSeller === 'booksrun') {
+        setAllBooksrun(removeBook);
+      } else {
+        setAllOneplanet(removeBook);
+      }
+    } catch (error) {
+      console.error('Error updating book:', error);
+      buttons.forEach(btn => btn.disabled = false);
+      buttonElement.innerHTML = action === 'BOUGHT'
+        ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>'
+        : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>';
+      alert('Failed to update. Please try again.');
     }
+  }
+
+  const togglePriceFilter = (value: PriceFilter) => {
+    setPriceFilters(prev => {
+      if (value === 'all') return ['all'];
+      const next = prev.filter(v => v !== 'all');
+      if (next.includes(value)) {
+        const result = next.filter(v => v !== value);
+        return result.length === 0 ? ['all'] : result;
+      }
+      return [...next, value];
+    });
   };
 
-  const toggleSeller = (id: string) => {
-    setSelectedSellers(prev =>
-      prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]
-    );
-  };
-
-  const toggleCondition = (id: string) => {
-    setSelectedConditions(prev =>
-      prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]
-    );
-  };
-
-  const formatPrice = (cents: number) => {
-    return `$${(cents / 100).toFixed(2)}`;
+  const isNewBook = (book: Book) => {
+    const scrapedAt = new Date(book.scraped_at);
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    return scrapedAt > twentyFourHoursAgo;
   };
 
   return (
-    <main className="min-h-screen bg-neutral-50 dark:bg-neutral-950">
+    <>
       {/* Header */}
-      <header className="border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900">
-        <div className="max-w-6xl mx-auto px-4 py-6">
-          <div className="flex items-center gap-3">
-            <BookOpen className="w-8 h-8 text-neutral-900 dark:text-white" strokeWidth={1.5} />
-            <div>
-              <h1 className="text-xl font-semibold text-neutral-900 dark:text-white">ScanFlow</h1>
-              <p className="text-sm text-neutral-500">Book Arbitrage Finder</p>
-            </div>
+      <div className="header">
+        <h1>{activeSeller === 'booksrun' ? 'BooksRun Deals' : 'OnePlanetBooks Deals'}</h1>
+        <p>{activeSeller === 'booksrun' ? 'Books from BooksRun on eBay' : 'Books from OnePlanetBooks on eBay'}</p>
+
+        <div className="source-toggle-container">
+          <div className="source-toggle">
+            {SELLERS.map(s => (
+              <button
+                key={s.id}
+                className={`source-btn ${activeSeller === s.id ? 'active' : ''}`}
+                onClick={() => setActiveSeller(s.id)}
+              >
+                {s.label}
+                <span className="count">{sellerCounts[s.id] ?? '-'}</span>
+              </button>
+            ))}
           </div>
         </div>
-      </header>
 
-      <div className="max-w-6xl mx-auto px-4 py-8">
-        {/* Search Form */}
-        <form onSubmit={handleSearch} className="mb-8">
-          <div className="flex gap-3">
-            <div className="flex-1 relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-400" strokeWidth={1.5} />
-              <input
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search for books..."
-                className="w-full pl-12 pr-4 py-3 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-lg text-neutral-900 dark:text-white placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-900 dark:focus:ring-white focus:border-transparent transition-shadow"
-              />
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowFilters(!showFilters)}
-              className={`px-4 py-3 border rounded-lg flex items-center gap-2 transition-colors ${
-                showFilters
-                  ? 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 border-neutral-900 dark:border-white'
-                  : 'bg-white dark:bg-neutral-900 text-neutral-600 dark:text-neutral-400 border-neutral-200 dark:border-neutral-800 hover:border-neutral-300 dark:hover:border-neutral-700'
-              }`}
-            >
-              <Filter className="w-5 h-5" strokeWidth={1.5} />
-              <span className="hidden sm:inline">Filters</span>
-              <ChevronDown className={`w-4 h-4 transition-transform ${showFilters ? 'rotate-180' : ''}`} strokeWidth={1.5} />
-            </button>
-            <button
-              type="submit"
-              disabled={loading || !query.trim()}
-              className="px-6 py-3 bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 rounded-lg font-medium hover:bg-neutral-800 dark:hover:bg-neutral-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-            >
-              {loading ? (
-                <Loader2 className="w-5 h-5 animate-spin" strokeWidth={1.5} />
-              ) : (
-                <Search className="w-5 h-5" strokeWidth={1.5} />
-              )}
-              <span className="hidden sm:inline">Search</span>
-            </button>
-            <button
-              type="button"
-              onClick={handleBulkSearch}
-              disabled={bulkLoading}
-              className="px-6 py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-              title="Search all categories: 2K Textbooks, 1K Engineering, 1K Medicine, 1K Science"
-            >
-              {bulkLoading ? (
-                <Loader2 className="w-5 h-5 animate-spin" strokeWidth={1.5} />
-              ) : (
-                <Sparkles className="w-5 h-5" strokeWidth={1.5} />
-              )}
-              <span className="hidden sm:inline">Bulk Search</span>
-            </button>
+        <div className="stats">
+          <div className="stat">
+            <div className="stat-value">{stats.total}</div>
+            <div className="stat-label">Total</div>
           </div>
-
-          {/* Filters Panel */}
-          {showFilters && (
-            <div className="mt-4 p-6 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-lg">
-              <div className="grid md:grid-cols-4 gap-6">
-                {/* Category */}
-                <div>
-                  <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-3">
-                    Category
-                  </label>
-                  <select
-                    value={selectedCategory}
-                    onChange={(e) => setSelectedCategory(e.target.value)}
-                    className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg text-neutral-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 dark:focus:ring-white"
-                  >
-                    {CATEGORIES.map((cat) => (
-                      <option key={cat.id} value={cat.id}>
-                        {cat.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Sellers */}
-                <div>
-                  <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-3">
-                    Sellers
-                  </label>
-                  <div className="space-y-2">
-                    {SELLERS.map((seller) => (
-                      <label
-                        key={seller.id}
-                        className="flex items-center gap-3 cursor-pointer group"
-                      >
-                        <div
-                          className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
-                            selectedSellers.includes(seller.id)
-                              ? 'bg-neutral-900 dark:bg-white border-neutral-900 dark:border-white'
-                              : 'border-neutral-300 dark:border-neutral-600 group-hover:border-neutral-400 dark:group-hover:border-neutral-500'
-                          }`}
-                        >
-                          {selectedSellers.includes(seller.id) && (
-                            <svg className="w-3 h-3 text-white dark:text-neutral-900" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                            </svg>
-                          )}
-                        </div>
-                        <span className="text-sm text-neutral-600 dark:text-neutral-400">{seller.name}</span>
-                        <input
-                          type="checkbox"
-                          checked={selectedSellers.includes(seller.id)}
-                          onChange={() => toggleSeller(seller.id)}
-                          className="sr-only"
-                        />
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Conditions */}
-                <div>
-                  <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-3">
-                    Condition
-                  </label>
-                  <div className="space-y-2">
-                    {CONDITIONS.map((condition) => (
-                      <label
-                        key={condition.id}
-                        className="flex items-center gap-3 cursor-pointer group"
-                      >
-                        <div
-                          className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
-                            selectedConditions.includes(condition.id)
-                              ? 'bg-neutral-900 dark:bg-white border-neutral-900 dark:border-white'
-                              : 'border-neutral-300 dark:border-neutral-600 group-hover:border-neutral-400 dark:group-hover:border-neutral-500'
-                          }`}
-                        >
-                          {selectedConditions.includes(condition.id) && (
-                            <svg className="w-3 h-3 text-white dark:text-neutral-900" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                            </svg>
-                          )}
-                        </div>
-                        <span className="text-sm text-neutral-600 dark:text-neutral-400">{condition.name}</span>
-                        <input
-                          type="checkbox"
-                          checked={selectedConditions.includes(condition.id)}
-                          onChange={() => toggleCondition(condition.id)}
-                          className="sr-only"
-                        />
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Price Range */}
-                <div>
-                  <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-3">
-                    Price: ${minPrice} - ${maxPrice}
-                  </label>
-                  <div className="space-y-3">
-                    <div>
-                      <span className="text-xs text-neutral-400">Min: ${minPrice}</span>
-                      <input
-                        type="range"
-                        min={1}
-                        max={20}
-                        value={minPrice}
-                        onChange={(e) => setMinPrice(Math.min(Number(e.target.value), maxPrice - 1))}
-                        className="w-full h-2 bg-neutral-200 dark:bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-neutral-900 dark:accent-white"
-                      />
-                    </div>
-                    <div>
-                      <span className="text-xs text-neutral-400">Max: ${maxPrice}</span>
-                      <input
-                        type="range"
-                        min={1}
-                        max={50}
-                        value={maxPrice}
-                        onChange={(e) => setMaxPrice(Math.max(Number(e.target.value), minPrice + 1))}
-                        className="w-full h-2 bg-neutral-200 dark:bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-neutral-900 dark:accent-white"
-                      />
-                    </div>
-                  </div>
-                  <div className="flex justify-between mt-2 text-xs text-neutral-400">
-                    <span>$1</span>
-                    <span>$50</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </form>
-
-        {/* Error State */}
-        {error && (
-          <div className="mb-8 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-3">
-            <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0" strokeWidth={1.5} />
-            <p className="text-red-700 dark:text-red-300">{error}</p>
-            <button onClick={() => setError(null)} className="ml-auto">
-              <X className="w-5 h-5 text-red-400 hover:text-red-600" strokeWidth={1.5} />
-            </button>
+          <div className="stat">
+            <div className="stat-value" style={{ color: '#00cec9' }}>{stats.buy}</div>
+            <div className="stat-label">BUY</div>
           </div>
-        )}
-
-        {/* Results */}
-        {(results || loading) && (
-          <div>
-            <div className="flex flex-col gap-2 mb-6">
-              <div className="flex items-center justify-between">
-                <p className="text-neutral-600 dark:text-neutral-400">
-                  {results ? (
-                    <>
-                      Found <span className="font-semibold text-neutral-900 dark:text-white">{results.deals.length.toLocaleString()}</span> books
-                      {loadingCategory && <span className="text-amber-500 ml-2">(loading more...)</span>}
-                    </>
-                  ) : (
-                    <span className="text-amber-500">Starting search...</span>
-                  )}
-                </p>
-              </div>
-              {/* Loading indicator */}
-              {loadingCategory && (
-                <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span className="text-sm">Loading {loadingCategory}...</span>
-                </div>
-              )}
-              {/* Save stats */}
-              {(saveStats.saved > 0 || saveStats.duplicates > 0) && (
-                <div className="flex items-center gap-3 text-sm">
-                  <Database className="w-4 h-4 text-emerald-500" />
-                  <span className="text-emerald-600 dark:text-emerald-400">
-                    {saveStats.saved} saved
-                  </span>
-                  {saveStats.duplicates > 0 && (
-                    <span className="text-neutral-400">
-                      ({saveStats.duplicates} duplicates)
-                    </span>
-                  )}
-                </div>
-              )}
-              {/* Rate limit warning */}
-              {rateLimited && (
-                <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
-                  <AlertCircle className="w-4 h-4" />
-                  <span className="text-sm">Rate limited - showing partial results</span>
-                </div>
-              )}
-              {results?.categoryBreakdown && Object.keys(results.categoryBreakdown).length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {Object.entries(results.categoryBreakdown).map(([category, count]) => (
-                    <span key={category} className="px-2 py-1 text-xs bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 rounded">
-                      {category}: {count}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {!results || results.deals.length === 0 ? (
-              loading ? (
-                <div className="text-center py-16 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-lg">
-                  <Loader2 className="w-12 h-12 text-amber-500 mx-auto mb-4 animate-spin" strokeWidth={1.5} />
-                  <p className="text-neutral-500">Loading books from {loadingCategory || 'eBay'}...</p>
-                </div>
-              ) : (
-                <div className="text-center py-16 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-lg">
-                  <BookOpen className="w-12 h-12 text-neutral-300 dark:text-neutral-600 mx-auto mb-4" strokeWidth={1} />
-                  <p className="text-neutral-500">No books found. Try a different search.</p>
-                </div>
-              )
-            ) : (
-              <div className="grid gap-4">
-                {results.deals.map((deal) => (
-                  <div
-                    key={deal.ebayItemId}
-                    onClick={() => setSelectedDeal(deal)}
-                    className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-lg p-4 hover:border-neutral-400 dark:hover:border-neutral-600 hover:shadow-md transition-all cursor-pointer group"
-                  >
-                    <div className="flex gap-4">
-                      {/* Image */}
-                      <div className="w-20 h-28 flex-shrink-0 bg-neutral-100 dark:bg-neutral-800 rounded overflow-hidden">
-                        {deal.ebayImage ? (
-                          <Image
-                            src={deal.ebayImage}
-                            alt={deal.ebayTitle}
-                            width={80}
-                            height={112}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <BookOpen className="w-8 h-8 text-neutral-300 dark:text-neutral-600" strokeWidth={1} />
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Details */}
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-medium text-neutral-900 dark:text-white line-clamp-2 mb-2">
-                          {deal.ebayTitle}
-                        </h3>
-
-                        <div className="flex flex-wrap gap-3 text-sm text-neutral-500 mb-3">
-                          <div className="flex items-center gap-1.5">
-                            <Store className="w-4 h-4" strokeWidth={1.5} />
-                            <span>{deal.ebaySeller}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <Tag className="w-4 h-4" strokeWidth={1.5} />
-                            <span>{deal.ebayCondition}</span>
-                          </div>
-                          {deal.isbn && (
-                            <div className="flex items-center gap-1.5 font-mono text-xs bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded">
-                              ISBN: {deal.isbn}
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="flex items-center justify-between">
-                          <div className="text-2xl font-semibold text-neutral-900 dark:text-white">
-                            {formatPrice(deal.ebayPrice)}
-                            {deal.ebayShipping > 0 && (
-                              <span className="text-sm font-normal text-neutral-400 ml-2">
-                                +{formatPrice(deal.ebayShipping)} shipping
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <a
-                              href={deal.ebayUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={(e) => e.stopPropagation()}
-                              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white border border-neutral-200 dark:border-neutral-700 rounded-lg hover:border-neutral-300 dark:hover:border-neutral-600 transition-colors"
-                            >
-                              eBay
-                              <ExternalLink className="w-4 h-4" strokeWidth={1.5} />
-                            </a>
-                            <div className="flex items-center gap-1 px-3 py-2 text-sm font-medium text-neutral-400 group-hover:text-neutral-900 dark:group-hover:text-white transition-colors">
-                              Details
-                              <ChevronRight className="w-4 h-4" strokeWidth={1.5} />
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-
-                {/* Loading more indicator at bottom */}
-                {loadingCategory && (
-                  <div className="flex items-center justify-center gap-3 py-8 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-lg">
-                    <Loader2 className="w-6 h-6 text-amber-500 animate-spin" strokeWidth={1.5} />
-                    <p className="text-neutral-500">Loading {loadingCategory}...</p>
-                  </div>
-                )}
-              </div>
-            )}
+          <div className="stat">
+            <div className="stat-value" style={{ color: '#fdcb6e' }}>{stats.review}</div>
+            <div className="stat-label">REVIEW</div>
           </div>
-        )}
-
-        {/* Featured Deals (shown when no search results) */}
-        {!results && !loading && (
-          <div>
-            <div className="flex items-center gap-2 mb-6">
-              <Sparkles className="w-5 h-5 text-amber-500" strokeWidth={1.5} />
-              <h2 className="text-lg font-semibold text-neutral-900 dark:text-white">Featured Deals</h2>
-              <span className="text-sm text-neutral-400">Fresh finds from top sellers</span>
-            </div>
-
-            {featuredLoading ? (
-              <div className="flex items-center justify-center py-16">
-                <Loader2 className="w-8 h-8 text-neutral-400 animate-spin" />
-                <span className="ml-3 text-neutral-500">Finding best deals...</span>
-              </div>
-            ) : featuredError ? (
-              <div className="flex items-center gap-3 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg mb-12">
-                <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0" strokeWidth={1.5} />
-                <div>
-                  <p className="text-amber-700 dark:text-amber-300 font-medium">{featuredError}</p>
-                  {featuredError.includes('rate limit') ? (
-                    <p className="text-amber-600 dark:text-amber-400 text-sm mt-1">API limit reached. Please wait a few minutes and refresh.</p>
-                  ) : featuredError.includes('credentials') || featuredError.includes('authentication') ? (
-                    <p className="text-amber-600 dark:text-amber-400 text-sm mt-1">Please check API configuration.</p>
-                  ) : (
-                    <p className="text-amber-600 dark:text-amber-400 text-sm mt-1">Please try again later.</p>
-                  )}
-                </div>
-              </div>
-            ) : featuredDeals.length > 0 ? (
-              <div className="grid gap-4 mb-12">
-                {featuredDeals.map((deal) => (
-                  <div
-                    key={deal.ebayItemId}
-                    onClick={() => setSelectedDeal(deal)}
-                    className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-lg p-4 hover:border-amber-400 dark:hover:border-amber-500 hover:shadow-md transition-all cursor-pointer group"
-                  >
-                    <div className="flex gap-4">
-                      {/* Image */}
-                      <div className="w-20 h-28 flex-shrink-0 bg-neutral-100 dark:bg-neutral-800 rounded overflow-hidden">
-                        {deal.ebayImage ? (
-                          <Image
-                            src={deal.ebayImage}
-                            alt={deal.ebayTitle}
-                            width={80}
-                            height={112}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <BookOpen className="w-8 h-8 text-neutral-300 dark:text-neutral-600" strokeWidth={1} />
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Details */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-2 mb-2">
-                          <h3 className="font-medium text-neutral-900 dark:text-white line-clamp-2">
-                            {deal.ebayTitle}
-                          </h3>
-                          {deal.decision && (
-                            <span className={`flex-shrink-0 px-2 py-0.5 text-xs font-medium rounded ${
-                              deal.decision === 'BUY' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
-                              deal.decision === 'REVIEW' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
-                              'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400'
-                            }`}>
-                              {deal.decision}
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="flex flex-wrap gap-3 text-sm text-neutral-500 mb-3">
-                          <div className="flex items-center gap-1.5">
-                            <Store className="w-4 h-4" strokeWidth={1.5} />
-                            <span>{deal.ebaySeller}</span>
-                          </div>
-                          {deal.fbaProfit !== undefined && deal.fbaProfit > 0 && (
-                            <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
-                              <TrendingUp className="w-4 h-4" strokeWidth={1.5} />
-                              <span>${(deal.fbaProfit / 100).toFixed(2)} profit</span>
-                            </div>
-                          )}
-                          {deal.salesRankDrops30 !== undefined && deal.salesRankDrops30 !== null && (
-                            <div className="text-blue-600 dark:text-blue-400 font-medium">
-                              {deal.salesRankDrops30} sales/mo
-                            </div>
-                          )}
-                          {deal.salesRank && (
-                            <div className="text-neutral-400">
-                              Rank #{deal.salesRank >= 1000000 ? `${(deal.salesRank / 1000000).toFixed(1)}M` : deal.salesRank >= 1000 ? `${Math.round(deal.salesRank / 1000)}K` : deal.salesRank}
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="text-2xl font-semibold text-neutral-900 dark:text-white">
-                              {formatPrice(deal.ebayPrice)}
-                            </div>
-                            {deal.buyBoxPrice && (
-                              <div className="text-sm text-neutral-400">
-                                → {formatPrice(deal.buyBoxPrice)} on Amazon
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-1 px-3 py-2 text-sm font-medium text-neutral-400 group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
-                            Details
-                            <ChevronRight className="w-4 h-4" strokeWidth={1.5} />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-16 bg-neutral-50 dark:bg-neutral-900/50 rounded-lg mb-12">
-                <BookOpen className="w-12 h-12 text-neutral-300 dark:text-neutral-600 mx-auto mb-4" strokeWidth={1} />
-                <p className="text-neutral-500">No featured deals available right now.</p>
-              </div>
-            )}
-
-            <div className="text-center py-8 border-t border-neutral-200 dark:border-neutral-800">
-              <p className="text-neutral-400 text-sm">
-                Or search for specific books above
-              </p>
-            </div>
+          <div className="stat">
+            <div className="stat-value" style={{ color: '#e74c3c' }}>{stats.reject}</div>
+            <div className="stat-label">REJECT</div>
           </div>
-        )}
+          <div className="stat">
+            <div className="stat-value" style={{ color: '#2ed573' }}>{stats.bought}</div>
+            <div className="stat-label">BOUGHT</div>
+          </div>
+          <div className="stat">
+            <div className="stat-value" style={{ color: '#00b894' }}>{stats.today}</div>
+            <div className="stat-label">TODAY</div>
+          </div>
+        </div>
       </div>
 
-      {/* Book Detail Modal */}
-      {selectedDeal && (
-        <BookDetailModal
-          deal={selectedDeal}
-          onClose={() => setSelectedDeal(null)}
-        />
-      )}
-    </main>
+      {/* Main Layout */}
+      <div className="main-layout">
+        {/* Sidebar */}
+        <div className="sidebar">
+          <div className="filter-section">
+            <input
+              type="text"
+              className="search-box"
+              placeholder="Search title or ISBN..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+            />
+          </div>
+
+          <div className="filter-section">
+            <div className="filter-title">Hasan Filter</div>
+            <div className="filter-options">
+              <div
+                className={`filter-toggle ${hasanFilter ? 'active' : ''}`}
+                onClick={() => setHasanFilter(!hasanFilter)}
+              >
+                <span className="checkbox" />
+                <span className="label">5x+ ROI &amp; $30+ Amazon</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="filter-section">
+            <div className="filter-title">Decision</div>
+            <div className="filter-options">
+              {(['all', 'BUY', 'REVIEW', 'REJECT'] as DecisionFilter[]).map(d => (
+                <div
+                  key={d}
+                  className={`filter-toggle ${decisionFilter === d ? 'active' : ''}`}
+                  onClick={() => setDecisionFilter(d)}
+                >
+                  <span className="checkbox" />
+                  <span className="label">{d === 'all' ? 'All' : d}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="filter-section">
+            <div className="filter-title">Buy Price</div>
+            <div className="filter-options">
+              {([
+                { id: 'all' as PriceFilter, label: 'All Prices' },
+                { id: '0-5' as PriceFilter, label: 'Under $5' },
+                { id: '5-10' as PriceFilter, label: '$5 - $10' },
+                { id: '10-20' as PriceFilter, label: '$10 - $20' },
+                { id: '20+' as PriceFilter, label: '$20+' },
+              ]).map(p => (
+                <div
+                  key={p.id}
+                  className={`filter-toggle ${priceFilters.includes(p.id) ? 'active' : ''}`}
+                  onClick={() => togglePriceFilter(p.id)}
+                >
+                  <span className="checkbox" />
+                  <span className="label">{p.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="filter-section">
+            <div className="filter-title">Format</div>
+            <div className="filter-options">
+              {([
+                { id: 'all' as FormatFilter, label: 'All Formats' },
+                { id: 'Paperback' as FormatFilter, label: 'Paperback' },
+                { id: 'Hardcover' as FormatFilter, label: 'Hardcover' },
+              ]).map(f => (
+                <div
+                  key={f.id}
+                  className={`filter-toggle ${formatFilter === f.id ? 'active' : ''}`}
+                  onClick={() => setFormatFilter(f.id)}
+                >
+                  <span className="checkbox" />
+                  <span className="label">{f.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="filter-section">
+            <div className="filter-title">Weight (lbs)</div>
+            <div className="filter-options">
+              {([
+                { id: 'all' as WeightFilter, label: 'All Weights' },
+                { id: '0-5' as WeightFilter, label: 'Under 5 lbs' },
+                { id: '5-10' as WeightFilter, label: '5 - 10 lbs' },
+                { id: '10-20' as WeightFilter, label: '10 - 20 lbs' },
+                { id: '20+' as WeightFilter, label: '20+ lbs' },
+              ]).map(w => (
+                <div
+                  key={w.id}
+                  className={`filter-toggle ${weightFilter === w.id ? 'active' : ''}`}
+                  onClick={() => setWeightFilter(w.id)}
+                >
+                  <span className="checkbox" />
+                  <span className="label">{w.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="filter-section">
+            <div className="filter-title">Min Profit</div>
+            <input
+              type="number"
+              className="search-box"
+              placeholder="e.g. 20"
+              value={minProfit}
+              onChange={e => setMinProfit(e.target.value)}
+            />
+          </div>
+
+          <div className="filter-section">
+            <div className="filter-title">ROI Range</div>
+            <input
+              type="text"
+              className="search-box"
+              placeholder="e.g. 7 for 7.0x-7.9x"
+              value={minRoi}
+              onChange={e => setMinRoi(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="content">
+          <div className="results-count">
+            {loading ? '' : `Showing ${filteredBooks.length} book${filteredBooks.length !== 1 ? 's' : ''}`}
+          </div>
+
+          {loading ? (
+            <div className="loading">
+              <div className="loading-spinner" />
+              <p>Loading books...</p>
+            </div>
+          ) : filteredBooks.length === 0 ? (
+            <div className="no-results">
+              <p>No books found matching your criteria.</p>
+            </div>
+          ) : (
+            <div className="books-grid">
+              {filteredBooks.map(book => {
+                const buyPrice = book.price / 100;
+                const amazonPrice = book.amazon_price ? book.amazon_price / 100 : null;
+                const salesRank = book.sales_rank;
+                const roi = amazonPrice && buyPrice > 0 ? amazonPrice / buyPrice : null;
+                const soldPerMonth = book.sales_rank_drops_90 != null ? Math.round(book.sales_rank_drops_90 / 3) : null;
+                const weightLbs = book.weight_oz ? (book.weight_oz / 16).toFixed(1) : null;
+                const bookIsNew = isNewBook(book);
+
+                return (
+                  <div key={book.id} className="book-card">
+                    <div className="book-card-content">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+                        {book.decision ? (
+                          <span className={`decision-badge ${book.decision}`}>{book.decision}</span>
+                        ) : <span />}
+                        {book.amazon_flag && (
+                          <span className={`amazon-flag ${book.amazon_flag}`} title={
+                            book.amazon_flag === 'green' ? 'Amazon out >50% of time' :
+                            book.amazon_flag === 'yellow' ? 'Amazon out 20-50%' :
+                            'Amazon in stock >80%'
+                          }>
+                            {book.amazon_flag === 'green' ? 'AMZ OUT' : book.amazon_flag === 'yellow' ? 'AMZ MID' : 'AMZ IN'}
+                          </span>
+                        )}
+                      </div>
+
+                      <h3 className="book-title">{book.title}</h3>
+
+                      <div className="book-meta">
+                        {bookIsNew && <span className="badge badge-new">NEW</span>}
+                        <span className="badge badge-format">{book.book_type || 'Unknown'}</span>
+                        <span className="badge badge-condition">{book.condition || 'Used'}</span>
+                        <span className="badge badge-seller">{book.seller}</span>
+                      </div>
+
+                      <div className="price-card">
+                        <div className="price-row">
+                          <span className="price-label">Buy Price</span>
+                          <span className="price-value buy">${buyPrice.toFixed(2)}</span>
+                        </div>
+                        {roi !== null && (
+                          <div className="price-row">
+                            <span className="price-label">Multiplier</span>
+                            <span className="price-value profit" style={{ fontSize: '1.2rem', fontWeight: 700 }}>{roi.toFixed(1)}x</span>
+                          </div>
+                        )}
+                        {amazonPrice !== null && (
+                          <div className="price-row">
+                            <span className="price-label">Amazon Price</span>
+                            <span className="price-value">${amazonPrice.toFixed(2)}</span>
+                          </div>
+                        )}
+                        {salesRank !== null && (
+                          <div className="price-row">
+                            <span className="price-label">Rank</span>
+                            <span className="rank-badge">
+                              <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                              {salesRank.toLocaleString()}
+                            </span>
+                          </div>
+                        )}
+                        <div className="price-row">
+                          <span className="price-label">Sold/Month</span>
+                          <span className={`price-value ${(soldPerMonth ?? 0) >= 3 ? 'profit' : (soldPerMonth ?? 0) >= 2 ? '' : 'loss'}`}>
+                            {soldPerMonth ?? 0}
+                          </span>
+                        </div>
+                        {weightLbs && (
+                          <div className="price-row">
+                            <span className="price-label">Weight</span>
+                            <span className="price-value">{weightLbs} lbs</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="book-isbn">ISBN: {book.isbn}</div>
+
+                      <div className="platform-buttons">
+                        {book.asin ? (
+                          <a href={`https://www.amazon.com/dp/${book.asin}`} target="_blank" rel="noopener noreferrer" className="platform-btn amazon">
+                            <span className="platform-name">Buy Box</span>
+                            <span className="platform-price">{amazonPrice ? `$${amazonPrice.toFixed(2)}` : 'View'}</span>
+                          </a>
+                        ) : (
+                          <span className="platform-btn amazon disabled">
+                            <span className="platform-name">Buy Box</span>
+                            <span className="platform-price">N/A</span>
+                          </span>
+                        )}
+                        <a href={book.ebay_url} target="_blank" rel="noopener noreferrer"
+                          className={`platform-btn ${book.seller === 'booksrun' ? 'ebay' : 'oneplanet'}`}>
+                          <span className="platform-name">{book.seller === 'booksrun' ? 'BR eBay' : 'OnePlanet'}</span>
+                          <span className="platform-price">${buyPrice.toFixed(2)}</span>
+                        </a>
+                      </div>
+
+                      <div className="action-buttons">
+                        <button
+                          className="action-btn remove"
+                          onClick={(e) => handleAction(book.id, 'REJECT', e.currentTarget)}
+                          title="Remove"
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <path d="M18 6L6 18M6 6l12 12"/>
+                          </svg>
+                        </button>
+                        <button
+                          className="action-btn bought"
+                          onClick={(e) => handleAction(book.id, 'BOUGHT', e.currentTarget)}
+                          title="Bought"
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <path d="M20 6L9 17l-5-5"/>
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </>
   );
 }

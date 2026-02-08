@@ -1,9 +1,21 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.SUPABASE_URL || '';
-const supabaseKey = process.env.SUPABASE_KEY || '';
+// Server-side Supabase client
+const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseKey = process.env.SUPABASE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
 export const supabase = createClient(supabaseUrl, supabaseKey);
+
+// Client-side Supabase client (uses NEXT_PUBLIC_ env vars)
+let clientSupabase: ReturnType<typeof createClient> | null = null;
+
+export function getClientSupabase() {
+  if (clientSupabase) return clientSupabase;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+  clientSupabase = createClient(url, key);
+  return clientSupabase;
+}
 
 // Database types
 export interface EbayBook {
@@ -21,7 +33,7 @@ export interface EbayBook {
   scraped_at: string;
 
   // Amazon/Keepa data (filled after evaluation)
-  decision: 'BUY' | 'REVIEW' | 'REJECT' | null;
+  decision: 'BUY' | 'REVIEW' | 'REJECT' | 'BOUGHT' | null;
   asin: string | null;
   amazon_price: number | null;      // in cents
   sales_rank: number | null;
@@ -31,11 +43,39 @@ export interface EbayBook {
   fbm_profit: number | null;        // in cents
   fba_roi: number | null;           // percentage
   score: number | null;
+  book_type: string | null;         // 'Paperback', 'Hardcover', etc.
+  weight_oz: number | null;         // weight in ounces
   evaluated_at: string | null;
+
+  // Action tracking
+  bought_at: string | null;
 }
 
 // Table name
-export const EBAY_BOOKS_TABLE = 'oneplanetbooks_books';
+export const EBAY_BOOKS_TABLE = 'ebay_books';
+
+// Mark a book with an action (BOUGHT or REJECT)
+export async function markBookAction(
+  id: number,
+  action: 'BOUGHT' | 'REJECT'
+): Promise<boolean> {
+  const updates: Record<string, unknown> = { decision: action };
+  if (action === 'BOUGHT') {
+    updates.bought_at = new Date().toISOString();
+  }
+
+  const { error } = await supabase
+    .from(EBAY_BOOKS_TABLE)
+    .update(updates)
+    .eq('id', id);
+
+  if (error) {
+    console.error(`Action error for book ${id}:`, error.message);
+    return false;
+  }
+
+  return true;
+}
 
 // Save books to database (batch insert)
 export async function saveBooks(books: Omit<EbayBook, 'id'>[]): Promise<{ saved: number; duplicates: number; errors: number }> {
