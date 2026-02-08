@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { SELLERS, CATEGORIES } from './config.js';
-import { searchListings } from './ebayApi.js';
+import { scrapeAllListings } from './ebayApi.js';
 import { getExistingISBNs, insertBooks } from './supabase.js';
 import { evaluatePendingBooks } from './evaluate.js';
 
@@ -17,27 +17,23 @@ async function main() {
     console.log(`\nSeller: ${seller}`);
 
     for (const cat of CATEGORIES) {
+      console.log(`  Category: ${cat.name} (${cat.id})`);
+
       try {
-        const books = await searchListings(seller, cat.id);
-
-        // Filter out books we already have
-        const newBooks = books.filter(b => !existingISBNs.has(b.isbn));
-        const skipped = books.length - newBooks.length;
-
-        // Insert new books
-        const result = await insertBooks(newBooks);
-
-        // Add new ISBNs to the set for subsequent iterations
-        for (const book of newBooks) {
-          existingISBNs.add(book.isbn);
-        }
-
-        totalNew += result.saved;
-        totalSkipped += skipped + result.duplicates;
-
-        console.log(
-          `  ${cat.name}: ${books.length} found, ${result.saved} new, ${skipped} already known, ${result.duplicates} dup, ${result.errors} errors`
+        const result = await scrapeAllListings(
+          seller,
+          cat.id,
+          existingISBNs,
+          async (books, pageNum) => {
+            // Insert this page's books to DB immediately
+            const insertResult = await insertBooks(books);
+            console.log(`      → Inserted ${insertResult.saved}, ${insertResult.duplicates} dups, ${insertResult.errors} errors`);
+            totalNew += insertResult.saved;
+            totalSkipped += insertResult.duplicates;
+          },
         );
+
+        console.log(`  ${cat.name} done: ${result.totalScraped} scraped, ${result.totalWithISBN} with ISBN, ${result.totalNew} new`);
       } catch (error) {
         console.error(`  ${cat.name}: ERROR -`, error instanceof Error ? error.message : error);
       }
