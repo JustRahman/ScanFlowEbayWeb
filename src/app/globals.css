@@ -497,7 +497,6 @@ body {
 .platform-btn.booksrun { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
 .platform-btn.ebay { background: linear-gradient(135deg, #e53238 0%, #f5af02 100%); }
 .platform-btn.oneplanet { background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%); }
-.platform-btn.thriftbooks { background: linear-gradient(135deg, #00796B 0%, #26A69A 100%); }
 .platform-btn.profit-btn { background: linear-gradient(135deg, #2ed573 0%, #26de81 100%); color: #052e16; }
 
 .platform-btn.disabled {
