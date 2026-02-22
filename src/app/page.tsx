@@ -11,7 +11,7 @@ const HEADERS = {
   'Authorization': `Bearer ${SUPABASE_KEY}`,
 };
 
-type Seller = 'booksrun' | 'oneplanetbooks' | 'thrift.books' | 'second.sale';
+type Seller = 'booksrun' | 'oneplanetbooks' | 'thrift.books' | 'second.sale' | 'betterworldbooks';
 type DecisionFilter = 'all' | 'BUY' | 'REVIEW' | 'REJECT';
 type PriceFilter = 'all' | '0-5' | '5-10' | '10-20' | '20+';
 type FormatFilter = 'all' | 'Paperback' | 'Hardcover';
@@ -52,6 +52,7 @@ const SELLERS: { id: Seller; label: string }[] = [
   { id: 'oneplanetbooks', label: 'OnePlanetBooks' },
   { id: 'thrift.books', label: 'ThriftBooks' },
   { id: 'second.sale', label: 'SecondSale' },
+  { id: 'betterworldbooks', label: 'BWB' },
 ];
 
 export default function Home() {
@@ -74,6 +75,7 @@ export default function Home() {
   const [allOneplanet, setAllOneplanet] = useState<Book[]>([]);
   const [allThriftbooks, setAllThriftbooks] = useState<Book[]>([]);
   const [allSecondsale, setAllSecondsale] = useState<Book[]>([]);
+  const [allBwb, setAllBwb] = useState<Book[]>([]);
 
   // ── Fetch ALL books for a seller with pagination (1000 per page) ──
   const fetchAllBooksForSeller = useCallback(async (seller: string): Promise<Book[]> => {
@@ -104,16 +106,18 @@ export default function Home() {
   useEffect(() => {
     async function loadAll() {
       setLoading(true);
-      const [br, op, tb, ss] = await Promise.all([
+      const [br, op, tb, ss, bwb] = await Promise.all([
         fetchAllBooksForSeller('booksrun'),
         fetchAllBooksForSeller('oneplanetbooks'),
         fetchAllBooksForSeller('thrift.books'),
         fetchAllBooksForSeller('second.sale'),
+        fetchAllBooksForSeller('betterworldbooks'),
       ]);
       setAllBooksrun(br);
       setAllOneplanet(op);
       setAllThriftbooks(tb);
       setAllSecondsale(ss);
+      setAllBwb(bwb);
       // Set active seller's books
       setAllBooks(br); // default is booksrun
       setLoading(false);
@@ -128,9 +132,10 @@ export default function Home() {
       oneplanetbooks: allOneplanet,
       'thrift.books': allThriftbooks,
       'second.sale': allSecondsale,
+      betterworldbooks: allBwb,
     };
     setAllBooks(map[activeSeller]);
-  }, [activeSeller, allBooksrun, allOneplanet, allThriftbooks, allSecondsale]);
+  }, [activeSeller, allBooksrun, allOneplanet, allThriftbooks, allSecondsale, allBwb]);
 
   // ── Seller counts (BUY count for each) ──
   const sellerCounts = useMemo(() => ({
@@ -138,7 +143,8 @@ export default function Home() {
     oneplanetbooks: allOneplanet.filter(b => b.decision === 'BUY').length,
     'thrift.books': allThriftbooks.filter(b => b.decision === 'BUY').length,
     'second.sale': allSecondsale.filter(b => b.decision === 'BUY').length,
-  }), [allBooksrun, allOneplanet, allThriftbooks, allSecondsale]);
+    betterworldbooks: allBwb.filter(b => b.decision === 'BUY').length,
+  }), [allBooksrun, allOneplanet, allThriftbooks, allSecondsale, allBwb]);
 
   // ── Stats (computed from all books for active seller) ──
   const stats = useMemo(() => {
@@ -250,13 +256,14 @@ export default function Home() {
       // Remove from both the active list and the cached seller list
       const removeBook = (books: Book[]) => books.filter(b => b.id !== bookId);
       setAllBooks(removeBook);
-      if (activeSeller === 'booksrun') {
-        setAllBooksrun(removeBook);
-      } else if (activeSeller === 'oneplanetbooks') {
-        setAllOneplanet(removeBook);
-      } else {
-        setAllThriftbooks(removeBook);
-      }
+      const setterMap: Record<Seller, typeof setAllBooksrun> = {
+        booksrun: setAllBooksrun,
+        oneplanetbooks: setAllOneplanet,
+        'thrift.books': setAllThriftbooks,
+        'second.sale': setAllSecondsale,
+        betterworldbooks: setAllBwb,
+      };
+      setterMap[activeSeller](removeBook);
     } catch (error) {
       console.error('Error updating book:', error);
       buttons.forEach(btn => btn.disabled = false);
@@ -573,8 +580,8 @@ export default function Home() {
                           </span>
                         )}
                         <a href={book.ebay_url} target="_blank" rel="noopener noreferrer"
-                          className={`platform-btn ${book.seller === 'booksrun' ? 'ebay' : book.seller === 'thrift.books' ? 'thriftbooks' : 'oneplanet'}`}>
-                          <span className="platform-name">{book.seller === 'booksrun' ? 'BR eBay' : book.seller === 'thrift.books' ? 'ThriftBooks' : 'OnePlanet'}</span>
+                          className={`platform-btn ${book.seller === 'booksrun' ? 'ebay' : book.seller === 'thrift.books' ? 'thriftbooks' : book.seller === 'betterworldbooks' ? 'ebay' : 'oneplanet'}`}>
+                          <span className="platform-name">{{booksrun: 'BR eBay', 'thrift.books': 'ThriftBooks', oneplanetbooks: 'OnePlanet', 'second.sale': 'SecondSale', betterworldbooks: 'BWB'}[book.seller] || book.seller}</span>
                           <span className="platform-price">${buyPrice.toFixed(2)}</span>
                         </a>
                       </div>
