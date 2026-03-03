@@ -56,7 +56,6 @@ const SELLERS: { id: Seller; label: string }[] = [
 ];
 
 export default function Home() {
-  const [allBooks, setAllBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeSeller, setActiveSeller] = useState<Seller>('booksrun');
 
@@ -85,7 +84,7 @@ export default function Home() {
 
     try {
       while (true) {
-        const url = `${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc&seller=eq.${seller}`;
+        const url = `${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc&seller=eq.${encodeURIComponent(seller)}`;
         const response = await fetch(url, {
           headers: { ...HEADERS, 'Range': `${offset}-${offset + PAGE_SIZE - 1}` }
         });
@@ -95,10 +94,10 @@ export default function Home() {
         if (page.length < PAGE_SIZE) break; // last page
         offset += PAGE_SIZE;
       }
-      return allResults;
+      return allResults.filter(b => b.seller === seller);
     } catch (error) {
       console.error(`Error fetching ${seller}:`, error);
-      return allResults; // return whatever we got so far
+      return allResults.filter(b => b.seller === seller);
     }
   }, []);
 
@@ -118,15 +117,13 @@ export default function Home() {
       setAllThriftbooks(tb);
       setAllSecondsale(ss);
       setAllBwb(bwb);
-      // Set active seller's books
-      setAllBooks(br); // default is booksrun
       setLoading(false);
     }
     loadAll();
   }, [fetchAllBooksForSeller]);
 
-  // ── Switch seller: use cached data ──
-  useEffect(() => {
+  // ── Active seller's books (derived, no extra state) ──
+  const allBooks = useMemo(() => {
     const map: Record<Seller, Book[]> = {
       booksrun: allBooksrun,
       oneplanetbooks: allOneplanet,
@@ -134,7 +131,7 @@ export default function Home() {
       'second.sale': allSecondsale,
       betterworldbooks: allBwb,
     };
-    setAllBooks(map[activeSeller]);
+    return map[activeSeller];
   }, [activeSeller, allBooksrun, allOneplanet, allThriftbooks, allSecondsale, allBwb]);
 
   // ── Seller counts (BUY count for each) ──
@@ -253,9 +250,7 @@ export default function Home() {
 
       card.classList.add('removing');
 
-      // Remove from both the active list and the cached seller list
       const removeBook = (books: Book[]) => books.filter(b => b.id !== bookId);
-      setAllBooks(removeBook);
       const setterMap: Record<Seller, typeof setAllBooksrun> = {
         booksrun: setAllBooksrun,
         oneplanetbooks: setAllOneplanet,
@@ -488,7 +483,7 @@ export default function Home() {
               <p>No books found matching your criteria.</p>
             </div>
           ) : (
-            <div className="books-grid">
+            <div className="books-grid" key={activeSeller}>
               {filteredBooks.map(book => {
                 const buyPrice = book.price / 100;
                 const amazonPrice = book.amazon_price ? book.amazon_price / 100 : null;
