@@ -282,9 +282,10 @@ export default function Home() {
   };
 
   const isNewBook = (book: Book) => {
-    const scrapedAt = new Date(book.scraped_at);
+    const dateStr = book.evaluated_at || book.scraped_at;
+    const date = new Date(dateStr);
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    return scrapedAt > twentyFourHoursAgo;
+    return date > twentyFourHoursAgo;
   };
 
   return (
