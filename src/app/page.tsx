@@ -512,8 +512,6 @@ export default function Home() {
                         )}
                       </div>
 
-                      <h3 className="book-title">{book.title}</h3>
-
                       <div className="book-meta">
                         {bookIsNew && <span className="badge badge-new">NEW</span>}
                         <span className="badge badge-format">{book.book_type || 'Unknown'}</span>
@@ -560,8 +558,6 @@ export default function Home() {
                           </div>
                         )}
                       </div>
-
-                      <div className="book-isbn">ISBN: {book.isbn}</div>
 
                       <div className="platform-buttons">
                         {book.asin ? (
