@@ -55,6 +55,10 @@ const SELLERS: { id: Seller; label: string }[] = [
   { id: 'betterworldbooks', label: 'BWB' },
 ];
 
+function numericItemId(id: string): string {
+  return id.includes('|') ? id.split('|')[1] : id;
+}
+
 export default function Home() {
   const [loading, setLoading] = useState(true);
   const [activeSeller, setActiveSeller] = useState<Seller>('booksrun');
@@ -76,41 +80,73 @@ export default function Home() {
   const [allSecondsale, setAllSecondsale] = useState<Book[]>([]);
   const [allBwb, setAllBwb] = useState<Book[]>([]);
 
-  // ── Fetch ALL books for a seller with pagination (1000 per page) ──
-  const fetchAllBooksForSeller = useCallback(async (seller: string): Promise<Book[]> => {
-    const PAGE_SIZE = 1000;
-    const allResults: Book[] = [];
-    let offset = 0;
+  // ── Stats counts (lightweight, no full rows) ──
+  const [statCounts, setStatCounts] = useState<Record<Seller, { total: number; buy: number; review: number; reject: number; bought: number; today: number }>>({
+    booksrun: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
+    oneplanetbooks: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
+    'thrift.books': { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
+    'second.sale': { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
+    betterworldbooks: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
+  });
 
+  // ── Fetch books: BUY + REVIEW (all) + REJECT (100 newest) per seller ──
+  const fetchBooksForSeller = useCallback(async (seller: string): Promise<Book[]> => {
     try {
-      while (true) {
-        const url = `${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc&seller=eq.${encodeURIComponent(seller)}`;
-        const response = await fetch(url, {
-          headers: { ...HEADERS, 'Range': `${offset}-${offset + PAGE_SIZE - 1}` }
-        });
-        if (!response.ok) break;
-        const page: Book[] = await response.json();
-        allResults.push(...page);
-        if (page.length < PAGE_SIZE) break; // last page
-        offset += PAGE_SIZE;
-      }
-      return allResults.filter(b => b.seller === seller);
+      const [buyReviewRes, rejectRes] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc&seller=eq.${encodeURIComponent(seller)}&decision=in.(BUY,REVIEW)`, {
+          headers: { ...HEADERS, 'Range': '0-999' }
+        }),
+        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.REJECT&limit=100`, {
+          headers: HEADERS
+        }),
+      ]);
+      const buyReview: Book[] = buyReviewRes.ok ? await buyReviewRes.json() : [];
+      const reject: Book[] = rejectRes.ok ? await rejectRes.json() : [];
+      return [...buyReview, ...reject];
     } catch (error) {
       console.error(`Error fetching ${seller}:`, error);
-      return allResults.filter(b => b.seller === seller);
+      return [];
     }
   }, []);
 
-  // ── Load both sellers on mount ──
+  // ── Fetch stat counts per seller (single lightweight query) ──
+  const fetchStatCounts = useCallback(async () => {
+    try {
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const sellers: Seller[] = ['booksrun', 'oneplanetbooks', 'thrift.books', 'second.sale', 'betterworldbooks'];
+      const results = await Promise.all(sellers.map(async (seller) => {
+        const [totalRes, buyRes, reviewRes, rejectRes, boughtRes, todayRes] = await Promise.all([
+          fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=id&seller=eq.${encodeURIComponent(seller)}`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+          fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=id&seller=eq.${encodeURIComponent(seller)}&decision=eq.BUY`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+          fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=id&seller=eq.${encodeURIComponent(seller)}&decision=eq.REVIEW`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+          fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=id&seller=eq.${encodeURIComponent(seller)}&decision=eq.REJECT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+          fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=id&seller=eq.${encodeURIComponent(seller)}&decision=eq.BOUGHT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+          fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=id&seller=eq.${encodeURIComponent(seller)}&bought_at=gte.${twentyFourHoursAgo}`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        ]);
+        const parseCount = (res: Response) => {
+          const range = res.headers.get('content-range');
+          return range ? parseInt(range.split('/')[1]) || 0 : 0;
+        };
+        return { seller, total: parseCount(totalRes), buy: parseCount(buyRes), review: parseCount(reviewRes), reject: parseCount(rejectRes), bought: parseCount(boughtRes), today: parseCount(todayRes) };
+      }));
+      const counts = {} as typeof statCounts;
+      for (const r of results) counts[r.seller as Seller] = r;
+      setStatCounts(counts);
+    } catch (error) {
+      console.error('Error fetching stat counts:', error);
+    }
+  }, []);
+
+  // ── Load on mount ──
   useEffect(() => {
     async function loadAll() {
       setLoading(true);
       const [br, op, tb, ss, bwb] = await Promise.all([
-        fetchAllBooksForSeller('booksrun'),
-        fetchAllBooksForSeller('oneplanetbooks'),
-        fetchAllBooksForSeller('thrift.books'),
-        fetchAllBooksForSeller('second.sale'),
-        fetchAllBooksForSeller('betterworldbooks'),
+        fetchBooksForSeller('booksrun'),
+        fetchBooksForSeller('oneplanetbooks'),
+        fetchBooksForSeller('thrift.books'),
+        fetchBooksForSeller('second.sale'),
+        fetchBooksForSeller('betterworldbooks'),
       ]);
       setAllBooksrun(br);
       setAllOneplanet(op);
@@ -120,7 +156,8 @@ export default function Home() {
       setLoading(false);
     }
     loadAll();
-  }, [fetchAllBooksForSeller]);
+    fetchStatCounts();
+  }, [fetchBooksForSeller, fetchStatCounts]);
 
   // ── Active seller's books (derived, no extra state) ──
   const allBooks = useMemo(() => {
@@ -136,25 +173,15 @@ export default function Home() {
 
   // ── Seller counts (BUY count for each) ──
   const sellerCounts = useMemo(() => ({
-    booksrun: allBooksrun.filter(b => b.decision === 'BUY').length,
-    oneplanetbooks: allOneplanet.filter(b => b.decision === 'BUY').length,
-    'thrift.books': allThriftbooks.filter(b => b.decision === 'BUY').length,
-    'second.sale': allSecondsale.filter(b => b.decision === 'BUY').length,
-    betterworldbooks: allBwb.filter(b => b.decision === 'BUY').length,
-  }), [allBooksrun, allOneplanet, allThriftbooks, allSecondsale, allBwb]);
+    booksrun: statCounts.booksrun.buy,
+    oneplanetbooks: statCounts.oneplanetbooks.buy,
+    'thrift.books': statCounts['thrift.books'].buy,
+    'second.sale': statCounts['second.sale'].buy,
+    betterworldbooks: statCounts.betterworldbooks.buy,
+  }), [statCounts]);
 
-  // ── Stats (computed from all books for active seller) ──
-  const stats = useMemo(() => {
-    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    return {
-      total: allBooks.length,
-      buy: allBooks.filter(b => b.decision === 'BUY').length,
-      review: allBooks.filter(b => b.decision === 'REVIEW').length,
-      reject: allBooks.filter(b => b.decision === 'REJECT').length,
-      bought: allBooks.filter(b => b.decision === 'BOUGHT').length,
-      today: allBooks.filter(b => b.bought_at && b.bought_at >= twentyFourHoursAgo).length,
-    };
-  }, [allBooks]);
+  // ── Stats (from count queries, not full rows) ──
+  const stats = useMemo(() => statCounts[activeSeller], [statCounts, activeSeller]);
 
   // ── Client-side filtering (decision + all other filters) ──
   const filteredBooks = useMemo(() => {
@@ -571,7 +598,7 @@ export default function Home() {
                             <span className="platform-price">N/A</span>
                           </span>
                         )}
-                        <a href={book.ebay_url} target="_blank" rel="noopener noreferrer"
+                        <a href={book.ebay_url.includes('|') ? `https://www.ebay.com/itm/${numericItemId(book.ebay_item_id)}` : book.ebay_url} target="_blank" rel="noopener noreferrer"
                           className={`platform-btn ${book.seller === 'booksrun' ? 'ebay' : book.seller === 'thrift.books' ? 'thriftbooks' : book.seller === 'betterworldbooks' ? 'ebay' : 'oneplanet'}`}>
                           <span className="platform-name">{{booksrun: 'BR eBay', 'thrift.books': 'ThriftBooks', oneplanetbooks: 'OnePlanet', 'second.sale': 'SecondSale', betterworldbooks: 'BWB'}[book.seller] || book.seller}</span>
                           <span className="platform-price">${buyPrice.toFixed(2)}</span>
@@ -606,6 +633,7 @@ export default function Home() {
           )}
         </div>
       </div>
+
     </>
   );
 }
