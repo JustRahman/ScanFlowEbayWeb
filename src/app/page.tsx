@@ -237,11 +237,11 @@ export default function Home() {
         }
       }
 
-      // Hasan Filter: 5x+ ROI AND $30+ Amazon price
+      // Hasan Filter: 5x+ ROI OR $30+ Amazon price
       if (hasanFilter) {
         const roi = book.amazon_price && book.price > 0 ? book.amazon_price / book.price : 0;
         const amazonDollars = book.amazon_price ? book.amazon_price / 100 : 0;
-        if (roi < 5 || amazonDollars < 30) return false;
+        if (roi < 5 && amazonDollars < 30) return false;
       }
 
       return true;
@@ -387,7 +387,7 @@ export default function Home() {
                 onClick={() => setHasanFilter(!hasanFilter)}
               >
                 <span className="checkbox" />
-                <span className="label">5x+ ROI &amp; $30+ Amazon</span>
+                <span className="label">5x+ ROI or $30+ Amazon</span>
               </div>
             </div>
           </div>
