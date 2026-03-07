@@ -602,6 +602,54 @@ body {
 }
 
 
+/* Price section toggle */
+.price-section {
+  margin-bottom: 1.5rem;
+}
+
+.section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #333;
+  transition: all 0.2s;
+  margin-bottom: 1rem;
+}
+
+.section-toggle:hover {
+  background: #f8f9fa;
+  border-color: #667eea;
+}
+
+.section-arrow {
+  font-size: 0.7rem;
+  color: #667eea;
+  width: 1rem;
+  text-align: center;
+}
+
+.section-title {
+  flex: 1;
+  text-align: left;
+}
+
+.section-count {
+  background: #667eea;
+  color: white;
+  padding: 0.15rem 0.6rem;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .main-layout {

@@ -52,7 +52,7 @@ export interface EbayBook {
 }
 
 // Table name
-export const EBAY_BOOKS_TABLE = 'ebay_books';
+export const EBAY_BOOKS_TABLE = 'ebay_books_test';
 
 // Mark a book with an action (BOUGHT or REJECT)
 export async function markBookAction(

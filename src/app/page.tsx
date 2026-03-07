@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 // Direct Supabase REST API — same approach as ScanFlow-ScapWeb
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const TABLE = 'ebay_books';
+const TABLE = 'ebay_books_test';
 const HEADERS = {
   'apikey': SUPABASE_KEY,
   'Authorization': `Bearer ${SUPABASE_KEY}`,
@@ -72,6 +72,8 @@ export default function Home() {
   const [minProfit, setMinProfit] = useState('');
   const [minRoi, setMinRoi] = useState('');
   const [hasanFilter, setHasanFilter] = useState(true);
+  const [cheapOpen, setCheapOpen] = useState(true);
+  const [expensiveOpen, setExpensiveOpen] = useState(true);
 
   // Store all books per seller for counts
   const [allBooksrun, setAllBooksrun] = useState<Book[]>([]);
@@ -88,6 +90,30 @@ export default function Home() {
     'second.sale': { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
     betterworldbooks: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
   });
+
+  // ── TEST: Fetch only specific ISBNs ──
+  const TEST_ISBNS = [
+    '9780393644227','9781556484742','9781543804843','9780323085113','9781630913670',
+    '9781284118445','9780299315801','9780133791853','9780966427639','9781462523344',
+    '9780826101204','9780892811281','9780826160010','9780979300202','9781585621859',
+    '9780803669260','9780323624190','9781285430461','9781260226775','9780076768240',
+    '9780323083881','9780528026348','9780195376999','9781337560443','9780393538021',
+    '9781610023030','9780321963086','9780803630529','9780578350479','9781111520991',
+    '9781305110861','9781111833237','9781578631193','9780393072624','9780808043010',
+  ];
+
+  const fetchTestBooks = useCallback(async (): Promise<Book[]> => {
+    try {
+      const isbnList = TEST_ISBNS.join(',');
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&isbn=in.(${isbnList})&order=scraped_at.desc`, {
+        headers: { ...HEADERS, 'Range': '0-999' }
+      });
+      return res.ok ? await res.json() : [];
+    } catch (error) {
+      console.error('Error fetching test books:', error);
+      return [];
+    }
+  }, []);
 
   // ── Fetch books: BUY + REVIEW (all) + REJECT (100 newest) per seller ──
   const fetchBooksForSeller = useCallback(async (seller: string): Promise<Book[]> => {
@@ -141,23 +167,17 @@ export default function Home() {
   useEffect(() => {
     async function loadAll() {
       setLoading(true);
-      const [br, op, tb, ss, bwb] = await Promise.all([
-        fetchBooksForSeller('booksrun'),
-        fetchBooksForSeller('oneplanetbooks'),
-        fetchBooksForSeller('thrift.books'),
-        fetchBooksForSeller('second.sale'),
-        fetchBooksForSeller('betterworldbooks'),
-      ]);
-      setAllBooksrun(br);
-      setAllOneplanet(op);
-      setAllThriftbooks(tb);
-      setAllSecondsale(ss);
-      setAllBwb(bwb);
+      const testBooks = await fetchTestBooks();
+      setAllBooksrun(testBooks);
+      setAllOneplanet([]);
+      setAllThriftbooks([]);
+      setAllSecondsale([]);
+      setAllBwb([]);
       setLoading(false);
     }
     loadAll();
     fetchStatCounts();
-  }, [fetchBooksForSeller, fetchStatCounts]);
+  }, [fetchTestBooks, fetchStatCounts]);
 
   // ── Active seller's books (derived, no extra state) ──
   const allBooks = useMemo(() => {
@@ -248,6 +268,9 @@ export default function Home() {
     });
   }, [allBooks, decisionFilter, searchQuery, priceFilters, formatFilter, weightFilter, minProfit, minRoi, hasanFilter]);
 
+  const cheapBooks = useMemo(() => filteredBooks.filter(b => b.price / 100 < 20), [filteredBooks]);
+  const expensiveBooks = useMemo(() => filteredBooks.filter(b => b.price / 100 >= 20), [filteredBooks]);
+
   // ── Action handler (direct PATCH to Supabase) ──
   async function handleAction(bookId: number, action: 'BOUGHT' | 'REJECT', buttonElement: HTMLButtonElement) {
     const card = buttonElement.closest('.book-card') as HTMLElement;
@@ -313,6 +336,124 @@ export default function Home() {
     const date = new Date(dateStr);
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     return date > twentyFourHoursAgo;
+  };
+
+  const renderBookCard = (book: Book) => {
+    const buyPrice = book.price / 100;
+    const amazonPrice = book.amazon_price ? book.amazon_price / 100 : null;
+    const salesRank = book.sales_rank;
+    const roi = amazonPrice && buyPrice > 0 ? amazonPrice / buyPrice : null;
+    const soldPerMonth = book.sales_rank_drops_90 != null ? Math.round(book.sales_rank_drops_90 / 3) : null;
+    const weightLbs = book.weight_oz ? (book.weight_oz / 16).toFixed(1) : null;
+    const bookIsNew = isNewBook(book);
+
+    return (
+      <div key={book.id} className="book-card">
+        <div className="book-card-content">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+            {book.decision ? (
+              <span className={`decision-badge ${book.decision}`}>{book.decision}</span>
+            ) : <span />}
+            {book.amazon_flag && (
+              <span className={`amazon-flag ${book.amazon_flag}`} title={
+                book.amazon_flag === 'green' ? 'Amazon out >50% of time' :
+                book.amazon_flag === 'yellow' ? 'Amazon out 20-50%' :
+                'Amazon in stock >80%'
+              }>
+                {book.amazon_flag === 'green' ? 'AMZ OUT' : book.amazon_flag === 'yellow' ? 'AMZ MID' : 'AMZ IN'}
+              </span>
+            )}
+          </div>
+
+          <div className="book-meta">
+            {bookIsNew && <span className="badge badge-new">NEW</span>}
+            <span className="badge badge-format">{book.book_type || 'Unknown'}</span>
+            <span className="badge badge-condition">{book.condition || 'Used'}</span>
+            <span className="badge badge-seller">{book.seller}</span>
+          </div>
+
+          <div className="price-card">
+            <div className="price-row">
+              <span className="price-label">Buy Price</span>
+              <span className="price-value buy">${buyPrice.toFixed(2)}</span>
+            </div>
+            {roi !== null && (
+              <div className="price-row">
+                <span className="price-label">Multiplier</span>
+                <span className="price-value profit" style={{ fontSize: '1.2rem', fontWeight: 700 }}>{roi.toFixed(1)}x</span>
+              </div>
+            )}
+            {amazonPrice !== null && (
+              <div className="price-row">
+                <span className="price-label">Amazon Price</span>
+                <span className="price-value">${amazonPrice.toFixed(2)}</span>
+              </div>
+            )}
+            {salesRank !== null && (
+              <div className="price-row">
+                <span className="price-label">Rank</span>
+                <span className="rank-badge">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                  {salesRank.toLocaleString()}
+                </span>
+              </div>
+            )}
+            <div className="price-row">
+              <span className="price-label">Sold/Month</span>
+              <span className={`price-value ${(soldPerMonth ?? 0) >= 3 ? 'profit' : (soldPerMonth ?? 0) >= 2 ? '' : 'loss'}`}>
+                {soldPerMonth ?? 0}
+              </span>
+            </div>
+            {weightLbs && (
+              <div className="price-row">
+                <span className="price-label">Weight</span>
+                <span className="price-value">{weightLbs} lbs</span>
+              </div>
+            )}
+          </div>
+
+          <div className="platform-buttons">
+            {book.asin ? (
+              <a href={`https://www.amazon.com/dp/${book.asin}`} target="_blank" rel="noopener noreferrer" className="platform-btn amazon">
+                <span className="platform-name">Buy Box</span>
+                <span className="platform-price">{amazonPrice ? `$${amazonPrice.toFixed(2)}` : 'View'}</span>
+              </a>
+            ) : (
+              <span className="platform-btn amazon disabled">
+                <span className="platform-name">Buy Box</span>
+                <span className="platform-price">N/A</span>
+              </span>
+            )}
+            <a href={book.ebay_url.includes('|') ? `https://www.ebay.com/itm/${numericItemId(book.ebay_item_id)}` : book.ebay_url} target="_blank" rel="noopener noreferrer"
+              className={`platform-btn ${book.seller === 'booksrun' ? 'ebay' : book.seller === 'thrift.books' ? 'thriftbooks' : book.seller === 'betterworldbooks' ? 'ebay' : 'oneplanet'}`}>
+              <span className="platform-name">{{booksrun: 'BR eBay', 'thrift.books': 'ThriftBooks', oneplanetbooks: 'OnePlanet', 'second.sale': 'SecondSale', betterworldbooks: 'BWB'}[book.seller] || book.seller}</span>
+              <span className="platform-price">${buyPrice.toFixed(2)}</span>
+            </a>
+          </div>
+
+          <div className="action-buttons">
+            <button
+              className="action-btn remove"
+              onClick={(e) => handleAction(book.id, 'REJECT', e.currentTarget)}
+              title="Remove"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M18 6L6 18M6 6l12 12"/>
+              </svg>
+            </button>
+            <button
+              className="action-btn bought"
+              onClick={(e) => handleAction(book.id, 'BOUGHT', e.currentTarget)}
+              title="Bought"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M20 6L9 17l-5-5"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -511,125 +652,36 @@ export default function Home() {
               <p>No books found matching your criteria.</p>
             </div>
           ) : (
-            <div className="books-grid" key={activeSeller}>
-              {filteredBooks.map(book => {
-                const buyPrice = book.price / 100;
-                const amazonPrice = book.amazon_price ? book.amazon_price / 100 : null;
-                const salesRank = book.sales_rank;
-                const roi = amazonPrice && buyPrice > 0 ? amazonPrice / buyPrice : null;
-                const soldPerMonth = book.sales_rank_drops_90 != null ? Math.round(book.sales_rank_drops_90 / 3) : null;
-                const weightLbs = book.weight_oz ? (book.weight_oz / 16).toFixed(1) : null;
-                const bookIsNew = isNewBook(book);
-
-                return (
-                  <div key={book.id} className="book-card">
-                    <div className="book-card-content">
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
-                        {book.decision ? (
-                          <span className={`decision-badge ${book.decision}`}>{book.decision}</span>
-                        ) : <span />}
-                        {book.amazon_flag && (
-                          <span className={`amazon-flag ${book.amazon_flag}`} title={
-                            book.amazon_flag === 'green' ? 'Amazon out >50% of time' :
-                            book.amazon_flag === 'yellow' ? 'Amazon out 20-50%' :
-                            'Amazon in stock >80%'
-                          }>
-                            {book.amazon_flag === 'green' ? 'AMZ OUT' : book.amazon_flag === 'yellow' ? 'AMZ MID' : 'AMZ IN'}
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="book-meta">
-                        {bookIsNew && <span className="badge badge-new">NEW</span>}
-                        <span className="badge badge-format">{book.book_type || 'Unknown'}</span>
-                        <span className="badge badge-condition">{book.condition || 'Used'}</span>
-                        <span className="badge badge-seller">{book.seller}</span>
-                      </div>
-
-                      <div className="price-card">
-                        <div className="price-row">
-                          <span className="price-label">Buy Price</span>
-                          <span className="price-value buy">${buyPrice.toFixed(2)}</span>
-                        </div>
-                        {roi !== null && (
-                          <div className="price-row">
-                            <span className="price-label">Multiplier</span>
-                            <span className="price-value profit" style={{ fontSize: '1.2rem', fontWeight: 700 }}>{roi.toFixed(1)}x</span>
-                          </div>
-                        )}
-                        {amazonPrice !== null && (
-                          <div className="price-row">
-                            <span className="price-label">Amazon Price</span>
-                            <span className="price-value">${amazonPrice.toFixed(2)}</span>
-                          </div>
-                        )}
-                        {salesRank !== null && (
-                          <div className="price-row">
-                            <span className="price-label">Rank</span>
-                            <span className="rank-badge">
-                              <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-                              {salesRank.toLocaleString()}
-                            </span>
-                          </div>
-                        )}
-                        <div className="price-row">
-                          <span className="price-label">Sold/Month</span>
-                          <span className={`price-value ${(soldPerMonth ?? 0) >= 3 ? 'profit' : (soldPerMonth ?? 0) >= 2 ? '' : 'loss'}`}>
-                            {soldPerMonth ?? 0}
-                          </span>
-                        </div>
-                        {weightLbs && (
-                          <div className="price-row">
-                            <span className="price-label">Weight</span>
-                            <span className="price-value">{weightLbs} lbs</span>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="platform-buttons">
-                        {book.asin ? (
-                          <a href={`https://www.amazon.com/dp/${book.asin}`} target="_blank" rel="noopener noreferrer" className="platform-btn amazon">
-                            <span className="platform-name">Buy Box</span>
-                            <span className="platform-price">{amazonPrice ? `$${amazonPrice.toFixed(2)}` : 'View'}</span>
-                          </a>
-                        ) : (
-                          <span className="platform-btn amazon disabled">
-                            <span className="platform-name">Buy Box</span>
-                            <span className="platform-price">N/A</span>
-                          </span>
-                        )}
-                        <a href={book.ebay_url.includes('|') ? `https://www.ebay.com/itm/${numericItemId(book.ebay_item_id)}` : book.ebay_url} target="_blank" rel="noopener noreferrer"
-                          className={`platform-btn ${book.seller === 'booksrun' ? 'ebay' : book.seller === 'thrift.books' ? 'thriftbooks' : book.seller === 'betterworldbooks' ? 'ebay' : 'oneplanet'}`}>
-                          <span className="platform-name">{{booksrun: 'BR eBay', 'thrift.books': 'ThriftBooks', oneplanetbooks: 'OnePlanet', 'second.sale': 'SecondSale', betterworldbooks: 'BWB'}[book.seller] || book.seller}</span>
-                          <span className="platform-price">${buyPrice.toFixed(2)}</span>
-                        </a>
-                      </div>
-
-                      <div className="action-buttons">
-                        <button
-                          className="action-btn remove"
-                          onClick={(e) => handleAction(book.id, 'REJECT', e.currentTarget)}
-                          title="Remove"
-                        >
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                            <path d="M18 6L6 18M6 6l12 12"/>
-                          </svg>
-                        </button>
-                        <button
-                          className="action-btn bought"
-                          onClick={(e) => handleAction(book.id, 'BOUGHT', e.currentTarget)}
-                          title="Bought"
-                        >
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                            <path d="M20 6L9 17l-5-5"/>
-                          </svg>
-                        </button>
-                      </div>
+            <>
+              {cheapBooks.length > 0 && (
+                <div className="price-section">
+                  <button className="section-toggle" onClick={() => setCheapOpen(!cheapOpen)}>
+                    <span className="section-arrow">{cheapOpen ? '\u25BC' : '\u25B6'}</span>
+                    <span className="section-title">Under $20</span>
+                    <span className="section-count">{cheapBooks.length}</span>
+                  </button>
+                  {cheapOpen && (
+                    <div className="books-grid" key={`${activeSeller}-cheap`}>
+                      {cheapBooks.map(book => renderBookCard(book))}
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  )}
+                </div>
+              )}
+              {expensiveBooks.length > 0 && (
+                <div className="price-section">
+                  <button className="section-toggle" onClick={() => setExpensiveOpen(!expensiveOpen)}>
+                    <span className="section-arrow">{expensiveOpen ? '\u25BC' : '\u25B6'}</span>
+                    <span className="section-title">$20+</span>
+                    <span className="section-count">{expensiveBooks.length}</span>
+                  </button>
+                  {expensiveOpen && (
+                    <div className="books-grid" key={`${activeSeller}-expensive`}>
+                      {expensiveBooks.map(book => renderBookCard(book))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
