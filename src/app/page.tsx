@@ -91,16 +91,26 @@ export default function Home() {
     betterworldbooks: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
   });
 
-  // ── Fetch ALL books for a seller (no limits) ──
+  // ── Fetch BUY + REVIEW books for a seller (paginated) ──
   const fetchBooksForSeller = useCallback(async (seller: string): Promise<Book[]> => {
+    const PAGE_SIZE = 1000;
+    const allBooks: Book[] = [];
+    let offset = 0;
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc&seller=eq.${encodeURIComponent(seller)}`, {
-        headers: { ...HEADERS, 'Range': '0-49999' }
-      });
-      return res.ok ? await res.json() : [];
+      while (true) {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc&seller=eq.${encodeURIComponent(seller)}&decision=in.(BUY,REVIEW)`, {
+          headers: { ...HEADERS, 'Range': `${offset}-${offset + PAGE_SIZE - 1}` }
+        });
+        if (!res.ok) break;
+        const batch: Book[] = await res.json();
+        allBooks.push(...batch);
+        if (batch.length < PAGE_SIZE) break;
+        offset += PAGE_SIZE;
+      }
+      return allBooks;
     } catch (error) {
       console.error(`Error fetching ${seller}:`, error);
-      return [];
+      return allBooks;
     }
   }, []);
 
