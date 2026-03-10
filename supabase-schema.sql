@@ -46,6 +46,22 @@ CREATE INDEX IF NOT EXISTS idx_ebay_books_seller ON ebay_books(seller);
 CREATE INDEX IF NOT EXISTS idx_ebay_books_bought_at ON ebay_books(bought_at);
 CREATE INDEX IF NOT EXISTS idx_ebay_books_pending ON ebay_books(scraped_at) WHERE decision IS NULL;
 
+-- Click tracking (unique per ISBN + seller)
+CREATE TABLE IF NOT EXISTS book_clicks (
+  id SERIAL PRIMARY KEY,
+  isbn VARCHAR(13) NOT NULL,
+  seller VARCHAR(100) NOT NULL,
+  clicked_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(isbn, seller)
+);
+
+ALTER TABLE book_clicks ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow all operations" ON book_clicks
+  FOR ALL
+  USING (true)
+  WITH CHECK (true);
+
 -- Enable Row Level Security
 ALTER TABLE ebay_books ENABLE ROW LEVEL SECURITY;
 

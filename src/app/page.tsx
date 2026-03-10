@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 
 // Direct Supabase REST API — same approach as ScanFlow-ScapWeb
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -62,6 +62,9 @@ function numericItemId(id: string): string {
 export default function Home() {
   const [loading, setLoading] = useState(true);
   const [activeSeller, setActiveSeller] = useState<Seller>('booksrun');
+  const clickedIsbns = useRef<Set<string>>(new Set());
+  const lastClickedBook = useRef<{ id: number; isbn: string; seller: string } | null>(null);
+  const [buyModalBook, setBuyModalBook] = useState<{ id: number; isbn: string; seller: string } | null>(null);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -163,6 +166,54 @@ export default function Home() {
     loadAll();
     fetchStatCounts();
   }, [fetchBooksForSeller, fetchStatCounts]);
+
+  // ── "Did you buy?" modal on tab return ──
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && lastClickedBook.current) {
+        setBuyModalBook(lastClickedBook.current);
+        lastClickedBook.current = null;
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []);
+
+  // ── Handle "Yes, I bought it" from modal ──
+  const handleBuyConfirm = async () => {
+    if (!buyModalBook) return;
+    try {
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?id=eq.${buyModalBook.id}`, {
+        method: 'PATCH',
+        headers: { ...HEADERS, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+        body: JSON.stringify({ decision: 'BOUGHT', bought_at: new Date().toISOString() }),
+      });
+      if (response.ok) {
+        const removeBook = (books: Book[]) => books.filter(b => b.id !== buyModalBook.id);
+        const setterMap: Record<Seller, typeof setAllBooksrun> = {
+          booksrun: setAllBooksrun,
+          oneplanetbooks: setAllOneplanet,
+          'thrift.books': setAllThriftbooks,
+          'second.sale': setAllSecondsale,
+          betterworldbooks: setAllBwb,
+        };
+        const seller = buyModalBook.seller as Seller;
+        if (setterMap[seller]) setterMap[seller](removeBook);
+        setStatCounts(prev => ({
+          ...prev,
+          [seller]: {
+            ...prev[seller],
+            bought: prev[seller].bought + 1,
+            today: prev[seller].today + 1,
+            buy: Math.max(0, prev[seller].buy - 1),
+          },
+        }));
+      }
+    } catch (error) {
+      console.error('Error marking as bought:', error);
+    }
+    setBuyModalBook(null);
+  };
 
   // ── Active seller's books (derived, no extra state) ──
   const allBooks = useMemo(() => {
@@ -323,6 +374,18 @@ export default function Home() {
     return date > twentyFourHoursAgo;
   };
 
+  const recordClick = (bookId: number, isbn: string, seller: string) => {
+    lastClickedBook.current = { id: bookId, isbn, seller };
+    const key = `${isbn}:${seller}`;
+    if (clickedIsbns.current.has(key)) return;
+    clickedIsbns.current.add(key);
+    fetch(`${SUPABASE_URL}/rest/v1/book_clicks`, {
+      method: 'POST',
+      headers: { ...HEADERS, 'Content-Type': 'application/json', 'Prefer': 'resolution=ignore-duplicates' },
+      body: JSON.stringify({ isbn, seller }),
+    }).catch(() => {});
+  };
+
   const renderBookCard = (book: Book) => {
     const buyPrice = book.price / 100;
     const amazonPrice = book.amazon_price ? book.amazon_price / 100 : null;
@@ -399,7 +462,7 @@ export default function Home() {
 
           <div className="platform-buttons">
             {book.asin ? (
-              <a href={`https://www.amazon.com/dp/${book.asin}`} target="_blank" rel="noopener noreferrer" className="platform-btn amazon">
+              <a href={`https://www.amazon.com/dp/${book.asin}`} target="_blank" rel="noopener noreferrer" className="platform-btn amazon" onClick={() => recordClick(book.id, book.isbn, book.seller)}>
                 <span className="platform-name">Buy Box</span>
                 <span className="platform-price">{amazonPrice ? `$${amazonPrice.toFixed(2)}` : 'View'}</span>
               </a>
@@ -410,7 +473,8 @@ export default function Home() {
               </span>
             )}
             <a href={book.ebay_url.includes('|') ? `https://www.ebay.com/itm/${numericItemId(book.ebay_item_id)}` : book.ebay_url} target="_blank" rel="noopener noreferrer"
-              className={`platform-btn ${book.seller === 'booksrun' ? 'ebay' : book.seller === 'thrift.books' ? 'thriftbooks' : book.seller === 'betterworldbooks' ? 'ebay' : 'oneplanet'}`}>
+              className={`platform-btn ${book.seller === 'booksrun' ? 'ebay' : book.seller === 'thrift.books' ? 'thriftbooks' : book.seller === 'betterworldbooks' ? 'ebay' : 'oneplanet'}`}
+              onClick={() => recordClick(book.id, book.isbn, book.seller)}>
               <span className="platform-name">{{booksrun: 'BR eBay', 'thrift.books': 'ThriftBooks', oneplanetbooks: 'OnePlanet', 'second.sale': 'SecondSale', betterworldbooks: 'BWB'}[book.seller] || book.seller}</span>
               <span className="platform-price">${buyPrice.toFixed(2)}</span>
             </a>
@@ -490,6 +554,40 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      {/* "Did you buy?" Modal */}
+      {buyModalBook && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }} onClick={() => setBuyModalBook(null)}>
+          <div style={{
+            background: '#1e1e2e', borderRadius: '1rem', padding: '2rem', minWidth: '320px',
+            textAlign: 'center', boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>Did you buy this book?</div>
+            <div style={{ color: '#a0a0b0', fontSize: '0.95rem', marginBottom: '1.5rem' }}>
+              ISBN: {buyModalBook.isbn}
+            </div>
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+              <button
+                onClick={() => setBuyModalBook(null)}
+                style={{
+                  padding: '0.75rem 2rem', borderRadius: '0.5rem', border: '1px solid #444',
+                  background: 'transparent', color: '#fff', cursor: 'pointer', fontSize: '1rem',
+                }}
+              >No</button>
+              <button
+                onClick={handleBuyConfirm}
+                style={{
+                  padding: '0.75rem 2rem', borderRadius: '0.5rem', border: 'none',
+                  background: '#2ed573', color: '#000', cursor: 'pointer', fontSize: '1rem', fontWeight: 600,
+                }}
+              >Yes, I bought it</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Layout */}
       <div className="main-layout">
