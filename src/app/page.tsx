@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 // Direct Supabase REST API — same approach as ScanFlow-ScapWeb
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const TABLE = 'ebay_books_test';
+const TABLE = 'ebay_books';
 const HEADERS = {
   'apikey': SUPABASE_KEY,
   'Authorization': `Bearer ${SUPABASE_KEY}`,
@@ -91,44 +91,13 @@ export default function Home() {
     betterworldbooks: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
   });
 
-  // ── TEST: Fetch only specific ISBNs ──
-  const TEST_ISBNS = [
-    '9780393644227','9781556484742','9781543804843','9780323085113','9781630913670',
-    '9781284118445','9780299315801','9780133791853','9780966427639','9781462523344',
-    '9780826101204','9780892811281','9780826160010','9780979300202','9781585621859',
-    '9780803669260','9780323624190','9781285430461','9781260226775','9780076768240',
-    '9780323083881','9780528026348','9780195376999','9781337560443','9780393538021',
-    '9781610023030','9780321963086','9780803630529','9780578350479','9781111520991',
-    '9781305110861','9781111833237','9781578631193','9780393072624','9780808043010',
-  ];
-
-  const fetchTestBooks = useCallback(async (): Promise<Book[]> => {
-    try {
-      const isbnList = TEST_ISBNS.join(',');
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&isbn=in.(${isbnList})&order=scraped_at.desc`, {
-        headers: { ...HEADERS, 'Range': '0-999' }
-      });
-      return res.ok ? await res.json() : [];
-    } catch (error) {
-      console.error('Error fetching test books:', error);
-      return [];
-    }
-  }, []);
-
-  // ── Fetch books: BUY + REVIEW (all) + REJECT (100 newest) per seller ──
+  // ── Fetch ALL books for a seller (no limits) ──
   const fetchBooksForSeller = useCallback(async (seller: string): Promise<Book[]> => {
     try {
-      const [buyReviewRes, rejectRes] = await Promise.all([
-        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc&seller=eq.${encodeURIComponent(seller)}&decision=in.(BUY,REVIEW)`, {
-          headers: { ...HEADERS, 'Range': '0-999' }
-        }),
-        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.REJECT&limit=100`, {
-          headers: HEADERS
-        }),
-      ]);
-      const buyReview: Book[] = buyReviewRes.ok ? await buyReviewRes.json() : [];
-      const reject: Book[] = rejectRes.ok ? await rejectRes.json() : [];
-      return [...buyReview, ...reject];
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc&seller=eq.${encodeURIComponent(seller)}`, {
+        headers: { ...HEADERS, 'Range': '0-49999' }
+      });
+      return res.ok ? await res.json() : [];
     } catch (error) {
       console.error(`Error fetching ${seller}:`, error);
       return [];
@@ -167,17 +136,23 @@ export default function Home() {
   useEffect(() => {
     async function loadAll() {
       setLoading(true);
-      const testBooks = await fetchTestBooks();
-      setAllBooksrun(testBooks);
-      setAllOneplanet([]);
-      setAllThriftbooks([]);
-      setAllSecondsale([]);
-      setAllBwb([]);
+      const [booksrun, oneplanet, thriftbooks, secondsale, bwb] = await Promise.all([
+        fetchBooksForSeller('booksrun'),
+        fetchBooksForSeller('oneplanetbooks'),
+        fetchBooksForSeller('thrift.books'),
+        fetchBooksForSeller('second.sale'),
+        fetchBooksForSeller('betterworldbooks'),
+      ]);
+      setAllBooksrun(booksrun);
+      setAllOneplanet(oneplanet);
+      setAllThriftbooks(thriftbooks);
+      setAllSecondsale(secondsale);
+      setAllBwb(bwb);
       setLoading(false);
     }
     loadAll();
     fetchStatCounts();
-  }, [fetchTestBooks, fetchStatCounts]);
+  }, [fetchBooksForSeller, fetchStatCounts]);
 
   // ── Active seller's books (derived, no extra state) ──
   const allBooks = useMemo(() => {
