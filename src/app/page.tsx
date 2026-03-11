@@ -94,26 +94,23 @@ export default function Home() {
     betterworldbooks: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
   });
 
-  // ── Fetch BUY + REVIEW books for a seller (paginated) ──
+  // ── Fetch 50 BUY + 50 REVIEW books per seller ──
   const fetchBooksForSeller = useCallback(async (seller: string): Promise<Book[]> => {
-    const PAGE_SIZE = 1000;
-    const allBooks: Book[] = [];
-    let offset = 0;
     try {
-      while (true) {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc&seller=eq.${encodeURIComponent(seller)}&decision=in.(BUY,REVIEW)`, {
-          headers: { ...HEADERS, 'Range': `${offset}-${offset + PAGE_SIZE - 1}` }
-        });
-        if (!res.ok) break;
-        const batch: Book[] = await res.json();
-        allBooks.push(...batch);
-        if (batch.length < PAGE_SIZE) break;
-        offset += PAGE_SIZE;
-      }
-      return allBooks;
+      const [buyRes, reviewRes] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.BUY&limit=50`, {
+          headers: HEADERS
+        }),
+        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.REVIEW&limit=50`, {
+          headers: HEADERS
+        }),
+      ]);
+      const buy: Book[] = buyRes.ok ? await buyRes.json() : [];
+      const review: Book[] = reviewRes.ok ? await reviewRes.json() : [];
+      return [...buy, ...review];
     } catch (error) {
       console.error(`Error fetching ${seller}:`, error);
-      return allBooks;
+      return [];
     }
   }, []);
 
