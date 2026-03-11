@@ -559,30 +559,45 @@ export default function Home() {
       {buyModalBook && (
         <div style={{
           position: 'fixed', inset: 0, zIndex: 9999,
-          background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
         }} onClick={() => setBuyModalBook(null)}>
           <div style={{
-            background: '#1e1e2e', borderRadius: '1rem', padding: '2rem', minWidth: '320px',
-            textAlign: 'center', boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+            background: '#fff', borderRadius: '1rem', padding: '2.5rem 2rem',
+            minWidth: '360px', maxWidth: '420px',
+            textAlign: 'center', boxShadow: '0 24px 48px rgba(0,0,0,0.2)',
+            animation: 'modalIn 0.2s ease-out',
           }} onClick={e => e.stopPropagation()}>
-            <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>Did you buy this book?</div>
-            <div style={{ color: '#a0a0b0', fontSize: '0.95rem', marginBottom: '1.5rem' }}>
+            <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>Did you buy this book?</div>
+            <div style={{
+              display: 'inline-block', background: '#f0f0f5', borderRadius: '0.5rem',
+              padding: '0.4rem 1rem', color: '#555', fontSize: '0.95rem', marginBottom: '1.75rem',
+              fontFamily: 'monospace', letterSpacing: '0.5px',
+            }}>
               ISBN: {buyModalBook.isbn}
             </div>
-            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
               <button
                 onClick={() => setBuyModalBook(null)}
                 style={{
-                  padding: '0.75rem 2rem', borderRadius: '0.5rem', border: '1px solid #444',
-                  background: 'transparent', color: '#fff', cursor: 'pointer', fontSize: '1rem',
+                  padding: '0.75rem 2rem', borderRadius: '0.5rem',
+                  border: '1px solid #ddd', background: '#f5f5f5',
+                  color: '#333', cursor: 'pointer', fontSize: '1rem',
+                  transition: 'background 0.15s',
                 }}
+                onMouseEnter={e => (e.currentTarget.style.background = '#eee')}
+                onMouseLeave={e => (e.currentTarget.style.background = '#f5f5f5')}
               >No</button>
               <button
                 onClick={handleBuyConfirm}
                 style={{
                   padding: '0.75rem 2rem', borderRadius: '0.5rem', border: 'none',
-                  background: '#2ed573', color: '#000', cursor: 'pointer', fontSize: '1rem', fontWeight: 600,
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  color: '#fff', cursor: 'pointer', fontSize: '1rem', fontWeight: 600,
+                  transition: 'opacity 0.15s',
                 }}
+                onMouseEnter={e => (e.currentTarget.style.opacity = '0.9')}
+                onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
               >Yes, I bought it</button>
             </div>
           </div>
