@@ -544,14 +544,6 @@ export default function Home() {
             <div className="stat-value" style={{ color: '#e74c3c' }}>{stats.reject}</div>
             <div className="stat-label">REJECT</div>
           </div>
-          <div className="stat">
-            <div className="stat-value" style={{ color: '#2ed573' }}>{stats.bought}</div>
-            <div className="stat-label">BOUGHT</div>
-          </div>
-          <div className="stat">
-            <div className="stat-value" style={{ color: '#00b894' }}>{stats.today}</div>
-            <div className="stat-label">TODAY</div>
-          </div>
         </div>
       </div>
 
