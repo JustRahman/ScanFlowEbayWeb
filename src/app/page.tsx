@@ -98,10 +98,10 @@ export default function Home() {
   const fetchBooksForSeller = useCallback(async (seller: string): Promise<Book[]> => {
     try {
       const [buyRes, reviewRes] = await Promise.all([
-        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.BUY&limit=50`, {
+        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.BUY&limit=50`, {
           headers: HEADERS
         }),
-        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.REVIEW&limit=50`, {
+        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.REVIEW&limit=50`, {
           headers: HEADERS
         }),
       ]);
