@@ -45,6 +45,7 @@ interface Book {
   weight_oz: number | null;
   evaluated_at: string | null;
   bought_at: string | null;
+  displayed: number;
 }
 
 const SELLERS: { id: Seller; label: string }[] = [
@@ -94,20 +95,32 @@ export default function Home() {
     betterworldbooks: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
   });
 
-  // ── Fetch 50 BUY + 50 REVIEW books per seller ──
+  // ── Fetch 25 BUY + 25 REVIEW books per seller, mark as displayed ──
   const fetchBooksForSeller = useCallback(async (seller: string): Promise<Book[]> => {
     try {
       const [buyRes, reviewRes] = await Promise.all([
-        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.BUY&limit=50`, {
+        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.BUY&displayed=eq.0&limit=25`, {
           headers: HEADERS
         }),
-        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.REVIEW&limit=50`, {
+        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.REVIEW&displayed=eq.0&limit=25`, {
           headers: HEADERS
         }),
       ]);
       const buy: Book[] = buyRes.ok ? await buyRes.json() : [];
       const review: Book[] = reviewRes.ok ? await reviewRes.json() : [];
-      return [...buy, ...review];
+      const allFetched = [...buy, ...review];
+
+      // Mark fetched books as displayed
+      const ids = allFetched.map(b => b.id);
+      if (ids.length > 0) {
+        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?id=in.(${ids.join(',')})`, {
+          method: 'PATCH',
+          headers: { ...HEADERS, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+          body: JSON.stringify({ displayed: 1 }),
+        }).catch(() => {});
+      }
+
+      return allFetched;
     } catch (error) {
       console.error(`Error fetching ${seller}:`, error);
       return [];

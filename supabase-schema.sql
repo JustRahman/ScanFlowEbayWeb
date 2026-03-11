@@ -34,7 +34,8 @@ CREATE TABLE IF NOT EXISTS ebay_books (
   evaluated_at TIMESTAMP WITH TIME ZONE,
 
   -- Action tracking
-  bought_at TIMESTAMP WITH TIME ZONE     -- Set when user marks as BOUGHT
+  bought_at TIMESTAMP WITH TIME ZONE,    -- Set when user marks as BOUGHT
+  displayed INTEGER DEFAULT 0            -- 1 = book was shown on the website
 );
 
 -- Indexes for common queries
@@ -45,6 +46,7 @@ CREATE INDEX IF NOT EXISTS idx_ebay_books_score ON ebay_books(score DESC);
 CREATE INDEX IF NOT EXISTS idx_ebay_books_seller ON ebay_books(seller);
 CREATE INDEX IF NOT EXISTS idx_ebay_books_bought_at ON ebay_books(bought_at);
 CREATE INDEX IF NOT EXISTS idx_ebay_books_pending ON ebay_books(scraped_at) WHERE decision IS NULL;
+CREATE INDEX IF NOT EXISTS idx_ebay_books_displayed ON ebay_books(displayed);
 
 -- Click tracking (unique per ISBN + seller)
 CREATE TABLE IF NOT EXISTS book_clicks (
