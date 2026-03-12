@@ -60,7 +60,16 @@ function numericItemId(id: string): string {
   return id.includes('|') ? id.split('|')[1] : id;
 }
 
+const PASSWORD = 'rfvtgb123';
+
 export default function Home() {
+  const [authed, setAuthed] = useState(() => {
+    if (typeof window !== 'undefined') return sessionStorage.getItem('scanflow_auth') === '1';
+    return false;
+  });
+  const [pw, setPw] = useState('');
+  const [pwError, setPwError] = useState(false);
+
   const [loading, setLoading] = useState(true);
   const [activeSeller, setActiveSeller] = useState<Seller>('booksrun');
   const clickedIsbns = useRef<Set<string>>(new Set());
@@ -515,6 +524,52 @@ export default function Home() {
       </div>
     );
   };
+
+  if (!authed) {
+    return (
+      <div style={{
+        minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      }}>
+        <div style={{
+          background: '#fff', borderRadius: '1rem', padding: '2.5rem 2rem',
+          width: '360px', textAlign: 'center', boxShadow: '0 24px 48px rgba(0,0,0,0.2)',
+        }}>
+          <h1 style={{ fontSize: '1.75rem', color: '#333', marginBottom: '0.5rem' }}>ScanFlow</h1>
+          <p style={{ color: '#888', fontSize: '0.9rem', marginBottom: '1.5rem' }}>Enter password to continue</p>
+          <form onSubmit={e => {
+            e.preventDefault();
+            if (pw === PASSWORD) {
+              sessionStorage.setItem('scanflow_auth', '1');
+              setAuthed(true);
+            } else {
+              setPwError(true);
+              setPw('');
+            }
+          }}>
+            <input
+              type="password"
+              value={pw}
+              onChange={e => { setPw(e.target.value); setPwError(false); }}
+              placeholder="Password"
+              autoFocus
+              style={{
+                width: '100%', padding: '0.75rem 1rem', borderRadius: '0.5rem',
+                border: `1px solid ${pwError ? '#e74c3c' : '#ddd'}`, fontSize: '1rem',
+                outline: 'none', marginBottom: '0.75rem', boxSizing: 'border-box',
+              }}
+            />
+            {pwError && <p style={{ color: '#e74c3c', fontSize: '0.85rem', marginBottom: '0.75rem' }}>Wrong password</p>}
+            <button type="submit" style={{
+              width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: 'none',
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              color: '#fff', fontSize: '1rem', fontWeight: 600, cursor: 'pointer',
+            }}>Sign In</button>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
