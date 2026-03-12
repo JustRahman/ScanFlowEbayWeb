@@ -46,6 +46,7 @@ interface Book {
   evaluated_at: string | null;
   bought_at: string | null;
   displayed: number;
+  displayed_at: string | null;
 }
 
 const SELLERS: { id: Seller; label: string }[] = [
@@ -376,8 +377,8 @@ export default function Home() {
   };
 
   const isNewBook = (book: Book) => {
-    const dateStr = book.evaluated_at || book.scraped_at;
-    const date = new Date(dateStr);
+    if (!book.displayed_at) return false;
+    const date = new Date(book.displayed_at);
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     return date > twentyFourHoursAgo;
   };
