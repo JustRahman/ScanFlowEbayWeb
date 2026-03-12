@@ -66,6 +66,7 @@ export default function Home() {
   const clickedIsbns = useRef<Set<string>>(new Set());
   const lastClickedBook = useRef<{ id: number; isbn: string; seller: string } | null>(null);
   const [buyModalBook, setBuyModalBook] = useState<{ id: number; isbn: string; seller: string } | null>(null);
+  const [notifySent, setNotifySent] = useState(false);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -555,6 +556,28 @@ export default function Home() {
             <div className="stat-label">REJECT</div>
           </div>
         </div>
+
+        <button
+          disabled={notifySent}
+          onClick={async () => {
+            setNotifySent(true);
+            const seller = SELLERS.find(s => s.id === activeSeller)?.label ?? activeSeller;
+            await fetch('/api/notify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ seller }),
+            }).catch(() => {});
+          }}
+          style={{
+            marginTop: '1rem', padding: '0.6rem 1.5rem', borderRadius: '50px',
+            border: 'none', background: notifySent ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.25)',
+            color: '#fff', cursor: notifySent ? 'default' : 'pointer', fontSize: '0.9rem',
+            fontWeight: 500, transition: 'background 0.15s',
+            opacity: notifySent ? 0.6 : 1,
+          }}
+        >
+          {notifySent ? 'Notified!' : 'Notify — Ready for new books'}
+        </button>
       </div>
 
       {/* "Did you buy?" Modal */}
