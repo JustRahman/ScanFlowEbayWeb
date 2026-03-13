@@ -35,7 +35,8 @@ CREATE TABLE IF NOT EXISTS ebay_books (
 
   -- Action tracking
   bought_at TIMESTAMP WITH TIME ZONE,    -- Set when user marks as BOUGHT
-  displayed INTEGER DEFAULT 0            -- 1 = book was shown on the website
+  displayed INTEGER DEFAULT 0,           -- 0 = unseen, 1 = active set, 2 = archived (rotated out)
+  displayed_at TIMESTAMP WITH TIME ZONE  -- When the book was added to the active set
 );
 
 -- Indexes for common queries
