@@ -493,7 +493,7 @@ export default function Home() {
             {hasSiteLink && (
               <a href={book.seller_url!} target="_blank" rel="noopener noreferrer" className="platform-btn website" onClick={() => recordClick(book.id, book.isbn, book.seller)}>
                 <span className="platform-name">{book.seller === 'booksrun' ? 'BooksRun' : 'BWB'} Site</span>
-                <span className="platform-price">${buyPrice.toFixed(2)}</span>
+                <span className="platform-price">View</span>
               </a>
             )}
             {book.amazon_url && (
