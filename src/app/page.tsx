@@ -50,6 +50,7 @@ interface Book {
   seller_url: string | null;
   amazon_url: string | null;
   best_offer_price: number | null;
+  best_offer_seller: string | null;
 }
 
 const SELLERS: { id: Seller; label: string }[] = [
@@ -497,7 +498,7 @@ export default function Home() {
             )}
             {book.amazon_url && (
               <a href={book.amazon_url} target="_blank" rel="noopener noreferrer" className="platform-btn amazon-seller" onClick={() => recordClick(book.id, book.isbn, book.seller)}>
-                <span className="platform-name">Amazon Seller</span>
+                <span className="platform-name">{book.best_offer_seller || 'Amazon Seller'}</span>
                 <span className="platform-price">{bestOfferPrice ? `$${bestOfferPrice.toFixed(2)}` : 'View'}</span>
               </a>
             )}

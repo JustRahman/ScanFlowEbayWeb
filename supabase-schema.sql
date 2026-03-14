@@ -39,7 +39,8 @@ CREATE TABLE IF NOT EXISTS ebay_books (
   displayed_at TIMESTAMP WITH TIME ZONE, -- When the book was added to the active set
   seller_url TEXT,                       -- Direct link to seller's website (BooksRun, BWB)
   amazon_url TEXT,                       -- Link to Amazon seller listing
-  best_offer_price INTEGER               -- Amazon seller price in cents
+  best_offer_price INTEGER,              -- Amazon seller price in cents
+  best_offer_seller VARCHAR(100)          -- Amazon seller name
 );
 
 -- Indexes for common queries
