@@ -11,7 +11,7 @@ const HEADERS = {
   'Authorization': `Bearer ${SUPABASE_KEY}`,
 };
 
-type Seller = 'booksrun' | 'oneplanetbooks' | 'thriftbooks.store' | 'second.sale' | 'betterworldbooks';
+type Seller = 'booksrun' | 'oneplanetbooks' | 'thriftbooks.store' | 'betterworldbooks';
 type DecisionFilter = 'all' | 'BUY' | 'REVIEW' | 'REJECT';
 type PriceFilter = 'all' | '0-5' | '5-10' | '10-20' | '20+';
 type FormatFilter = 'all' | 'Paperback' | 'Hardcover';
@@ -53,7 +53,7 @@ const SELLERS: { id: Seller; label: string }[] = [
   { id: 'booksrun', label: 'BooksRun' },
   { id: 'oneplanetbooks', label: 'OnePlanetBooks' },
   { id: 'thriftbooks.store', label: 'ThriftBooks' },
-  { id: 'second.sale', label: 'SecondSale' },
+
   { id: 'betterworldbooks', label: 'BWB' },
 ];
 
@@ -94,7 +94,7 @@ export default function Home() {
   const [allBooksrun, setAllBooksrun] = useState<Book[]>([]);
   const [allOneplanet, setAllOneplanet] = useState<Book[]>([]);
   const [allThriftbooks, setAllThriftbooks] = useState<Book[]>([]);
-  const [allSecondsale, setAllSecondsale] = useState<Book[]>([]);
+
   const [allBwb, setAllBwb] = useState<Book[]>([]);
 
   // ── Stats counts (lightweight, no full rows) ──
@@ -102,7 +102,7 @@ export default function Home() {
     booksrun: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
     oneplanetbooks: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
     'thriftbooks.store': { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
-    'second.sale': { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
+
     betterworldbooks: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
   });
 
@@ -130,7 +130,7 @@ export default function Home() {
   const fetchStatCounts = useCallback(async () => {
     try {
       const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      const sellers: Seller[] = ['booksrun', 'oneplanetbooks', 'thriftbooks.store', 'second.sale', 'betterworldbooks'];
+      const sellers: Seller[] = ['booksrun', 'oneplanetbooks', 'thriftbooks.store', 'betterworldbooks'];
       const results = await Promise.all(sellers.map(async (seller) => {
         const [totalRes, buyRes, reviewRes, rejectRes, boughtRes, todayRes] = await Promise.all([
           fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=id&seller=eq.${encodeURIComponent(seller)}`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
@@ -158,17 +158,15 @@ export default function Home() {
   useEffect(() => {
     async function loadAll() {
       setLoading(true);
-      const [booksrun, oneplanet, thriftbooks, secondsale, bwb] = await Promise.all([
+      const [booksrun, oneplanet, thriftbooks, bwb] = await Promise.all([
         fetchBooksForSeller('booksrun'),
         fetchBooksForSeller('oneplanetbooks'),
         fetchBooksForSeller('thriftbooks.store'),
-        fetchBooksForSeller('second.sale'),
         fetchBooksForSeller('betterworldbooks'),
       ]);
       setAllBooksrun(booksrun);
       setAllOneplanet(oneplanet);
       setAllThriftbooks(thriftbooks);
-      setAllSecondsale(secondsale);
       setAllBwb(bwb);
       setLoading(false);
     }
@@ -203,7 +201,7 @@ export default function Home() {
           booksrun: setAllBooksrun,
           oneplanetbooks: setAllOneplanet,
           'thriftbooks.store': setAllThriftbooks,
-          'second.sale': setAllSecondsale,
+
           betterworldbooks: setAllBwb,
         };
         const seller = buyModalBook.seller as Seller;
@@ -230,18 +228,18 @@ export default function Home() {
       booksrun: allBooksrun,
       oneplanetbooks: allOneplanet,
       'thriftbooks.store': allThriftbooks,
-      'second.sale': allSecondsale,
+
       betterworldbooks: allBwb,
     };
     return map[activeSeller];
-  }, [activeSeller, allBooksrun, allOneplanet, allThriftbooks, allSecondsale, allBwb]);
+  }, [activeSeller, allBooksrun, allOneplanet, allThriftbooks, allBwb]);
 
   // ── Seller counts (BUY count for each) ──
   const sellerCounts = useMemo(() => ({
     booksrun: statCounts.booksrun.buy,
     oneplanetbooks: statCounts.oneplanetbooks.buy,
     'thriftbooks.store': statCounts['thriftbooks.store'].buy,
-    'second.sale': statCounts['second.sale'].buy,
+
     betterworldbooks: statCounts.betterworldbooks.buy,
   }), [statCounts]);
 
@@ -350,7 +348,6 @@ export default function Home() {
         booksrun: setAllBooksrun,
         oneplanetbooks: setAllOneplanet,
         'thriftbooks.store': setAllThriftbooks,
-        'second.sale': setAllSecondsale,
         betterworldbooks: setAllBwb,
       };
       setterMap[activeSeller](removeBook);
@@ -484,7 +481,7 @@ export default function Home() {
             <a href={book.ebay_url.includes('|') ? `https://www.ebay.com/itm/${numericItemId(book.ebay_item_id)}` : book.ebay_url} target="_blank" rel="noopener noreferrer"
               className={`platform-btn ${book.seller === 'booksrun' ? 'ebay' : book.seller === 'thriftbooks.store' ? 'thriftbooks' : book.seller === 'betterworldbooks' ? 'ebay' : 'oneplanet'}`}
               onClick={() => recordClick(book.id, book.isbn, book.seller)}>
-              <span className="platform-name">{{booksrun: 'BR eBay', 'thriftbooks.store': 'ThriftBooks', oneplanetbooks: 'OnePlanet', 'second.sale': 'SecondSale', betterworldbooks: 'BWB'}[book.seller] || book.seller}</span>
+              <span className="platform-name">{{booksrun: 'BR eBay', 'thriftbooks.store': 'ThriftBooks', oneplanetbooks: 'OnePlanet', betterworldbooks: 'BWB'}[book.seller] || book.seller}</span>
               <span className="platform-price">${buyPrice.toFixed(2)}</span>
             </a>
           </div>
