@@ -47,6 +47,9 @@ interface Book {
   bought_at: string | null;
   displayed: number;
   displayed_at: string | null;
+  seller_url: string | null;
+  amazon_url: string | null;
+  best_offer_price: number | null;
 }
 
 const SELLERS: { id: Seller; label: string }[] = [
@@ -395,6 +398,8 @@ export default function Home() {
   const renderBookCard = (book: Book) => {
     const buyPrice = book.price / 100;
     const amazonPrice = book.amazon_price ? book.amazon_price / 100 : null;
+    const bestOfferPrice = book.best_offer_price ? book.best_offer_price / 100 : null;
+    const hasSiteLink = book.seller_url && (book.seller === 'booksrun' || book.seller === 'betterworldbooks');
     const salesRank = book.sales_rank;
     const roi = amazonPrice && buyPrice > 0 ? amazonPrice / buyPrice : null;
     const soldPerMonth = book.sales_rank_drops_90 != null ? Math.round(book.sales_rank_drops_90 / 3) : null;
@@ -484,6 +489,18 @@ export default function Home() {
               <span className="platform-name">{{booksrun: 'BR eBay', 'thriftbooks.store': 'ThriftBooks', oneplanetbooks: 'OnePlanet', betterworldbooks: 'BWB'}[book.seller] || book.seller}</span>
               <span className="platform-price">${buyPrice.toFixed(2)}</span>
             </a>
+            {hasSiteLink && (
+              <a href={book.seller_url!} target="_blank" rel="noopener noreferrer" className="platform-btn website" onClick={() => recordClick(book.id, book.isbn, book.seller)}>
+                <span className="platform-name">{book.seller === 'booksrun' ? 'BooksRun' : 'BWB'} Site</span>
+                <span className="platform-price">${buyPrice.toFixed(2)}</span>
+              </a>
+            )}
+            {book.amazon_url && (
+              <a href={book.amazon_url} target="_blank" rel="noopener noreferrer" className="platform-btn amazon-seller" onClick={() => recordClick(book.id, book.isbn, book.seller)}>
+                <span className="platform-name">Amazon Seller</span>
+                <span className="platform-price">{bestOfferPrice ? `$${bestOfferPrice.toFixed(2)}` : 'View'}</span>
+              </a>
+            )}
           </div>
 
           <div className="action-buttons">

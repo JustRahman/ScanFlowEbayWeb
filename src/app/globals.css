@@ -499,6 +499,8 @@ body {
 .platform-btn.oneplanet { background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%); }
 .platform-btn.thriftbooks { background: linear-gradient(135deg, #00796B 0%, #26A69A 100%); }
 .platform-btn.profit-btn { background: linear-gradient(135deg, #2ed573 0%, #26de81 100%); color: #052e16; }
+.platform-btn.website { background: linear-gradient(135deg, #8e44ad 0%, #9b59b6 100%); }
+.platform-btn.amazon-seller { background: linear-gradient(135deg, #e67e22 0%, #f39c12 100%); color: #111; }
 
 .platform-btn.disabled {
   background: #e0e0e0 !important;
