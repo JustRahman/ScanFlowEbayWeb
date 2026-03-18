@@ -6,12 +6,14 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const TABLE = 'ebay_books';
+const BF_TABLE = 'bookfinder_deals';
 const HEADERS = {
   'apikey': SUPABASE_KEY,
   'Authorization': `Bearer ${SUPABASE_KEY}`,
 };
 
 type Seller = 'booksrun' | 'oneplanetbooks' | 'thriftbooks.store' | 'betterworldbooks';
+type ActiveSource = Seller | 'bookfinder';
 type DecisionFilter = 'all' | 'BUY' | 'REVIEW' | 'REJECT';
 type PriceFilter = 'all' | '0-5' | '5-10' | '10-20' | '20+';
 type FormatFilter = 'all' | 'Paperback' | 'Hardcover';
@@ -51,6 +53,12 @@ interface Book {
   amazon_url: string | null;
   best_offer_price: number | null;
   best_offer_seller: string | null;
+  // BooksFinder fields
+  url?: string;
+  edition?: string;
+  pounds?: number;
+  source_scraped_at?: string;
+  _source?: 'ebay' | 'bookfinder';
 }
 
 const SELLERS: { id: Seller; label: string }[] = [
@@ -60,6 +68,17 @@ const SELLERS: { id: Seller; label: string }[] = [
 
   { id: 'betterworldbooks', label: 'BWB' },
 ];
+
+function getMarketplace(url: string): string {
+  if (url.includes('ebay.com')) return 'eBay';
+  if (url.includes('alibris.com')) return 'Alibris';
+  if (url.includes('booksrun.com')) return 'BooksRun';
+  if (url.includes('abebooks.com')) return 'AbeBooks';
+  if (url.includes('thriftbooks.com')) return 'ThriftBooks';
+  if (url.includes('betterworldbooks.com')) return 'BWB';
+  if (url.includes('textbookrush.com')) return 'TxtbkRush';
+  return 'Store';
+}
 
 function numericItemId(id: string): string {
   return id.includes('|') ? id.split('|')[1] : id;
@@ -76,10 +95,10 @@ export default function Home() {
   const [pwError, setPwError] = useState(false);
 
   const [loading, setLoading] = useState(true);
-  const [activeSeller, setActiveSeller] = useState<Seller>('booksrun');
+  const [activeSeller, setActiveSeller] = useState<ActiveSource>('booksrun');
   const clickedIsbns = useRef<Set<string>>(new Set());
-  const lastClickedBook = useRef<{ id: number; isbn: string; seller: string } | null>(null);
-  const [buyModalBook, setBuyModalBook] = useState<{ id: number; isbn: string; seller: string } | null>(null);
+  const lastClickedBook = useRef<{ id: number; isbn: string; seller: string; _source?: string } | null>(null);
+  const [buyModalBook, setBuyModalBook] = useState<{ id: number; isbn: string; seller: string; _source?: string } | null>(null);
   const [notifySent, setNotifySent] = useState(false);
 
   // Filters
@@ -100,14 +119,15 @@ export default function Home() {
   const [allThriftbooks, setAllThriftbooks] = useState<Book[]>([]);
 
   const [allBwb, setAllBwb] = useState<Book[]>([]);
+  const [allBookfinder, setAllBookfinder] = useState<Book[]>([]);
 
   // ── Stats counts (lightweight, no full rows) ──
-  const [statCounts, setStatCounts] = useState<Record<Seller, { total: number; buy: number; review: number; reject: number; bought: number; today: number }>>({
+  const [statCounts, setStatCounts] = useState<Record<ActiveSource, { total: number; buy: number; review: number; reject: number; bought: number; today: number }>>({
     booksrun: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
     oneplanetbooks: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
     'thriftbooks.store': { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
-
     betterworldbooks: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
+    bookfinder: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
   });
 
   // ── Fetch current displayed set (25 BUY + 25 REVIEW already marked displayed=1) ──
@@ -126,6 +146,39 @@ export default function Home() {
       return [...buy, ...review];
     } catch (error) {
       console.error(`Error fetching ${seller}:`, error);
+      return [];
+    }
+  }, []);
+
+  // ── Fetch BooksFinder books (bookfinder_deals table, prices in dollars → convert to cents) ──
+  const fetchBookfinderBooks = useCallback(async (): Promise<Book[]> => {
+    try {
+      const [buyRes, reviewRes] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/${BF_TABLE}?select=*&order=source_scraped_at.desc&decision=eq.BUY&displayed=eq.1&limit=25`, {
+          headers: HEADERS
+        }),
+        fetch(`${SUPABASE_URL}/rest/v1/${BF_TABLE}?select=*&order=source_scraped_at.desc&decision=eq.REVIEW&displayed=eq.1&limit=25`, {
+          headers: HEADERS
+        }),
+      ]);
+      const buy = buyRes.ok ? await buyRes.json() : [];
+      const review = reviewRes.ok ? await reviewRes.json() : [];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return [...buy, ...review].map((b: any) => ({
+        ...b,
+        price: Math.round((b.price || 0) * 100),
+        amazon_price: b.amazon_price ? Math.round(b.amazon_price * 100) : null,
+        fbm_profit: b.fbm_profit ? Math.round(b.fbm_profit * 100) : null,
+        book_type: b.edition || null,
+        weight_oz: b.pounds ? b.pounds * 16 : null,
+        ebay_url: b.url || '',
+        ebay_item_id: '',
+        shipping: 0,
+        category: '',
+        _source: 'bookfinder' as const,
+      }));
+    } catch (error) {
+      console.error('Error fetching bookfinder:', error);
       return [];
     }
   }, []);
@@ -151,7 +204,24 @@ export default function Home() {
         return { seller, total: parseCount(totalRes), buy: parseCount(buyRes), review: parseCount(reviewRes), reject: parseCount(rejectRes), bought: parseCount(boughtRes), today: parseCount(todayRes) };
       }));
       const counts = {} as typeof statCounts;
-      for (const r of results) counts[r.seller as Seller] = r;
+      for (const r of results) counts[r.seller as ActiveSource] = r;
+      // Fetch bookfinder stats
+      const [bfTotalRes, bfBuyRes, bfReviewRes, bfRejectRes, bfBoughtRes, bfTodayRes] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/${BF_TABLE}?select=id`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${SUPABASE_URL}/rest/v1/${BF_TABLE}?select=id&decision=eq.BUY`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${SUPABASE_URL}/rest/v1/${BF_TABLE}?select=id&decision=eq.REVIEW`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${SUPABASE_URL}/rest/v1/${BF_TABLE}?select=id&decision=eq.REJECT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${SUPABASE_URL}/rest/v1/${BF_TABLE}?select=id&decision=eq.BOUGHT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${SUPABASE_URL}/rest/v1/${BF_TABLE}?select=id&bought_at=gte.${twentyFourHoursAgo}`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+      ]);
+      const bfParseCount = (res: Response) => {
+        const range = res.headers.get('content-range');
+        return range ? parseInt(range.split('/')[1]) || 0 : 0;
+      };
+      counts.bookfinder = {
+        total: bfParseCount(bfTotalRes), buy: bfParseCount(bfBuyRes), review: bfParseCount(bfReviewRes),
+        reject: bfParseCount(bfRejectRes), bought: bfParseCount(bfBoughtRes), today: bfParseCount(bfTodayRes),
+      };
       setStatCounts(counts);
     } catch (error) {
       console.error('Error fetching stat counts:', error);
@@ -162,21 +232,23 @@ export default function Home() {
   useEffect(() => {
     async function loadAll() {
       setLoading(true);
-      const [booksrun, oneplanet, thriftbooks, bwb] = await Promise.all([
+      const [booksrun, oneplanet, thriftbooks, bwb, bookfinder] = await Promise.all([
         fetchBooksForSeller('booksrun'),
         fetchBooksForSeller('oneplanetbooks'),
         fetchBooksForSeller('thriftbooks.store'),
         fetchBooksForSeller('betterworldbooks'),
+        fetchBookfinderBooks(),
       ]);
       setAllBooksrun(booksrun);
       setAllOneplanet(oneplanet);
       setAllThriftbooks(thriftbooks);
       setAllBwb(bwb);
+      setAllBookfinder(bookfinder);
       setLoading(false);
     }
     loadAll();
     fetchStatCounts();
-  }, [fetchBooksForSeller, fetchStatCounts]);
+  }, [fetchBooksForSeller, fetchBookfinderBooks, fetchStatCounts]);
 
   // ── "Did you buy?" modal on tab return ──
   useEffect(() => {
@@ -194,29 +266,30 @@ export default function Home() {
   const handleBuyConfirm = async () => {
     if (!buyModalBook) return;
     try {
-      const response = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?id=eq.${buyModalBook.id}`, {
+      const table = buyModalBook._source === 'bookfinder' ? BF_TABLE : TABLE;
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${buyModalBook.id}`, {
         method: 'PATCH',
         headers: { ...HEADERS, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
         body: JSON.stringify({ decision: 'BOUGHT', bought_at: new Date().toISOString() }),
       });
       if (response.ok) {
         const removeBook = (books: Book[]) => books.filter(b => b.id !== buyModalBook.id);
-        const setterMap: Record<Seller, typeof setAllBooksrun> = {
+        const setterMap: Record<ActiveSource, typeof setAllBooksrun> = {
           booksrun: setAllBooksrun,
           oneplanetbooks: setAllOneplanet,
           'thriftbooks.store': setAllThriftbooks,
-
           betterworldbooks: setAllBwb,
+          bookfinder: setAllBookfinder,
         };
-        const seller = buyModalBook.seller as Seller;
-        if (setterMap[seller]) setterMap[seller](removeBook);
+        const source: ActiveSource = buyModalBook._source === 'bookfinder' ? 'bookfinder' : (buyModalBook.seller as Seller);
+        if (setterMap[source]) setterMap[source](removeBook);
         setStatCounts(prev => ({
           ...prev,
-          [seller]: {
-            ...prev[seller],
-            bought: prev[seller].bought + 1,
-            today: prev[seller].today + 1,
-            buy: Math.max(0, prev[seller].buy - 1),
+          [source]: {
+            ...prev[source],
+            bought: prev[source].bought + 1,
+            today: prev[source].today + 1,
+            buy: Math.max(0, prev[source].buy - 1),
           },
         }));
       }
@@ -228,23 +301,23 @@ export default function Home() {
 
   // ── Active seller's books (derived, no extra state) ──
   const allBooks = useMemo(() => {
-    const map: Record<Seller, Book[]> = {
+    const map: Record<ActiveSource, Book[]> = {
       booksrun: allBooksrun,
       oneplanetbooks: allOneplanet,
       'thriftbooks.store': allThriftbooks,
-
       betterworldbooks: allBwb,
+      bookfinder: allBookfinder,
     };
     return map[activeSeller];
-  }, [activeSeller, allBooksrun, allOneplanet, allThriftbooks, allBwb]);
+  }, [activeSeller, allBooksrun, allOneplanet, allThriftbooks, allBwb, allBookfinder]);
 
   // ── Seller counts (BUY count for each) ──
   const sellerCounts = useMemo(() => ({
     booksrun: statCounts.booksrun.buy,
     oneplanetbooks: statCounts.oneplanetbooks.buy,
     'thriftbooks.store': statCounts['thriftbooks.store'].buy,
-
     betterworldbooks: statCounts.betterworldbooks.buy,
+    bookfinder: statCounts.bookfinder.buy,
   }), [statCounts]);
 
   // ── Stats (from count queries, not full rows) ──
@@ -333,7 +406,8 @@ export default function Home() {
         updateData.bought_at = new Date().toISOString();
       }
 
-      const response = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?id=eq.${bookId}`, {
+      const table = activeSeller === 'bookfinder' ? BF_TABLE : TABLE;
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${bookId}`, {
         method: 'PATCH',
         headers: {
           ...HEADERS,
@@ -348,11 +422,12 @@ export default function Home() {
       card.classList.add('removing');
 
       const removeBook = (books: Book[]) => books.filter(b => b.id !== bookId);
-      const setterMap: Record<Seller, typeof setAllBooksrun> = {
+      const setterMap: Record<ActiveSource, typeof setAllBooksrun> = {
         booksrun: setAllBooksrun,
         oneplanetbooks: setAllOneplanet,
         'thriftbooks.store': setAllThriftbooks,
         betterworldbooks: setAllBwb,
+        bookfinder: setAllBookfinder,
       };
       setterMap[activeSeller](removeBook);
     } catch (error) {
@@ -384,16 +459,24 @@ export default function Home() {
     return date > twentyFourHoursAgo;
   };
 
-  const recordClick = (bookId: number, isbn: string, seller: string) => {
-    lastClickedBook.current = { id: bookId, isbn, seller };
-    const key = `${isbn}:${seller}`;
+  const recordClick = (bookId: number, isbn: string, seller: string, source?: string) => {
+    lastClickedBook.current = { id: bookId, isbn, seller, _source: source };
+    const key = source === 'bookfinder' ? `bf:${isbn}` : `${isbn}:${seller}`;
     if (clickedIsbns.current.has(key)) return;
     clickedIsbns.current.add(key);
-    fetch(`${SUPABASE_URL}/rest/v1/book_clicks`, {
-      method: 'POST',
-      headers: { ...HEADERS, 'Content-Type': 'application/json', 'Prefer': 'resolution=ignore-duplicates' },
-      body: JSON.stringify({ isbn, seller }),
-    }).catch(() => {});
+    if (source === 'bookfinder') {
+      fetch(`${SUPABASE_URL}/rest/v1/button_clicks_bf`, {
+        method: 'POST',
+        headers: { ...HEADERS, 'Content-Type': 'application/json', 'Prefer': 'resolution=ignore-duplicates' },
+        body: JSON.stringify({ isbn }),
+      }).catch(() => {});
+    } else {
+      fetch(`${SUPABASE_URL}/rest/v1/book_clicks`, {
+        method: 'POST',
+        headers: { ...HEADERS, 'Content-Type': 'application/json', 'Prefer': 'resolution=ignore-duplicates' },
+        body: JSON.stringify({ isbn, seller }),
+      }).catch(() => {});
+    }
   };
 
   const renderBookCard = (book: Book) => {
@@ -427,6 +510,7 @@ export default function Home() {
 
           <div className="book-meta">
             {bookIsNew && <span className="badge badge-new">NEW</span>}
+            {book._source === 'bookfinder' && <span className="badge badge-source">BF</span>}
             <span className="badge badge-format">{book.book_type || 'Unknown'}</span>
             <span className="badge badge-condition">{book.condition || 'Used'}</span>
             <span className="badge badge-seller">{book.seller}</span>
@@ -474,7 +558,7 @@ export default function Home() {
 
           <div className="platform-buttons">
             {book.asin ? (
-              <a href={`https://www.amazon.com/dp/${book.asin}`} target="_blank" rel="noopener noreferrer" className="platform-btn amazon" onClick={() => recordClick(book.id, book.isbn, book.seller)}>
+              <a href={`https://www.amazon.com/dp/${book.asin}`} target="_blank" rel="noopener noreferrer" className="platform-btn amazon" onClick={() => recordClick(book.id, book.isbn, book.seller, book._source)}>
                 <span className="platform-name">Buy Box</span>
                 <span className="platform-price">{amazonPrice ? `$${amazonPrice.toFixed(2)}` : 'View'}</span>
               </a>
@@ -484,23 +568,34 @@ export default function Home() {
                 <span className="platform-price">N/A</span>
               </span>
             )}
-            <a href={book.ebay_url.includes('|') ? `https://www.ebay.com/itm/${numericItemId(book.ebay_item_id)}` : book.ebay_url} target="_blank" rel="noopener noreferrer"
-              className={`platform-btn ${book.seller === 'booksrun' ? 'ebay' : book.seller === 'thriftbooks.store' ? 'thriftbooks' : book.seller === 'betterworldbooks' ? 'ebay' : 'oneplanet'}`}
-              onClick={() => recordClick(book.id, book.isbn, book.seller)}>
-              <span className="platform-name">{{booksrun: 'BR eBay', 'thriftbooks.store': 'ThriftBooks', oneplanetbooks: 'OnePlanet', betterworldbooks: 'BWB'}[book.seller] || book.seller}</span>
-              <span className="platform-price">${buyPrice.toFixed(2)}</span>
-            </a>
-            {hasSiteLink && (
-              <a href={book.seller_url!} target="_blank" rel="noopener noreferrer" className="platform-btn website" onClick={() => recordClick(book.id, book.isbn, book.seller)}>
-                <span className="platform-name">{book.seller === 'booksrun' ? 'BooksRun' : 'BWB'} Site</span>
-                <span className="platform-price">View</span>
-              </a>
-            )}
-            {book.amazon_url && (
-              <a href={book.amazon_url} target="_blank" rel="noopener noreferrer" className="platform-btn amazon-seller" onClick={() => recordClick(book.id, book.isbn, book.seller)}>
-                <span className="platform-name">{book.best_offer_seller || 'Amazon Seller'}</span>
-                <span className="platform-price">{bestOfferPrice ? `$${bestOfferPrice.toFixed(2)}` : 'View'}</span>
-              </a>
+            {book._source === 'bookfinder' ? (
+              book.url ? (
+                <a href={book.url} target="_blank" rel="noopener noreferrer" className="platform-btn ebay" onClick={() => recordClick(book.id, book.isbn, book.seller, book._source)}>
+                  <span className="platform-name">{getMarketplace(book.url)}</span>
+                  <span className="platform-price">${buyPrice.toFixed(2)}</span>
+                </a>
+              ) : null
+            ) : (
+              <>
+                <a href={book.ebay_url.includes('|') ? `https://www.ebay.com/itm/${numericItemId(book.ebay_item_id)}` : book.ebay_url} target="_blank" rel="noopener noreferrer"
+                  className={`platform-btn ${book.seller === 'booksrun' ? 'ebay' : book.seller === 'thriftbooks.store' ? 'thriftbooks' : book.seller === 'betterworldbooks' ? 'ebay' : 'oneplanet'}`}
+                  onClick={() => recordClick(book.id, book.isbn, book.seller, book._source)}>
+                  <span className="platform-name">{{booksrun: 'BR eBay', 'thriftbooks.store': 'ThriftBooks', oneplanetbooks: 'OnePlanet', betterworldbooks: 'BWB'}[book.seller] || book.seller}</span>
+                  <span className="platform-price">${buyPrice.toFixed(2)}</span>
+                </a>
+                {hasSiteLink && (
+                  <a href={book.seller_url!} target="_blank" rel="noopener noreferrer" className="platform-btn website" onClick={() => recordClick(book.id, book.isbn, book.seller, book._source)}>
+                    <span className="platform-name">{book.seller === 'booksrun' ? 'BooksRun' : 'BWB'} Site</span>
+                    <span className="platform-price">View</span>
+                  </a>
+                )}
+                {book.amazon_url && (
+                  <a href={book.amazon_url} target="_blank" rel="noopener noreferrer" className="platform-btn amazon-seller" onClick={() => recordClick(book.id, book.isbn, book.seller, book._source)}>
+                    <span className="platform-name">{book.best_offer_seller || 'Amazon Seller'}</span>
+                    <span className="platform-price">{bestOfferPrice ? `$${bestOfferPrice.toFixed(2)}` : 'View'}</span>
+                  </a>
+                )}
+              </>
             )}
           </div>
 
@@ -579,8 +674,8 @@ export default function Home() {
     <>
       {/* Header */}
       <div className="header">
-        <h1>{SELLERS.find(s => s.id === activeSeller)?.label ?? activeSeller} Deals</h1>
-        <p>Books from {SELLERS.find(s => s.id === activeSeller)?.label ?? activeSeller} on eBay</p>
+        <h1>{activeSeller === 'bookfinder' ? 'BooksFinder' : (SELLERS.find(s => s.id === activeSeller)?.label ?? activeSeller)} Deals</h1>
+        <p>{activeSeller === 'bookfinder' ? 'Books from BooksFinder' : `Books from ${SELLERS.find(s => s.id === activeSeller)?.label ?? activeSeller} on eBay`}</p>
 
         <div className="source-toggle-container">
           <div className="source-toggle">
@@ -594,6 +689,14 @@ export default function Home() {
                 <span className="count">{sellerCounts[s.id] ?? '-'}</span>
               </button>
             ))}
+            <button
+              key="bookfinder"
+              className={`source-btn ${activeSeller === 'bookfinder' ? 'active' : ''}`}
+              onClick={() => setActiveSeller('bookfinder')}
+            >
+              BooksFinder
+              <span className="count">{sellerCounts.bookfinder ?? '-'}</span>
+            </button>
           </div>
         </div>
 
@@ -620,7 +723,7 @@ export default function Home() {
           disabled={notifySent}
           onClick={async () => {
             setNotifySent(true);
-            const seller = SELLERS.find(s => s.id === activeSeller)?.label ?? activeSeller;
+            const seller = activeSeller === 'bookfinder' ? 'BooksFinder' : (SELLERS.find(s => s.id === activeSeller)?.label ?? activeSeller);
             await fetch('/api/notify', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
