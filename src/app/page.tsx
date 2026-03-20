@@ -145,17 +145,27 @@ export default function Home() {
   // ── Fetch current displayed set (25 BUY + 25 REVIEW already marked displayed=1) ──
   const fetchBooksForSeller = useCallback(async (seller: string): Promise<Book[]> => {
     try {
-      const [buyRes, reviewRes] = await Promise.all([
+      const fetches: Promise<Response>[] = [
         fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.BUY&displayed=eq.1&limit=25`, {
           headers: HEADERS
         }),
         fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.REVIEW&displayed=eq.1&limit=25`, {
           headers: HEADERS
         }),
-      ]);
-      const buy: Book[] = buyRes.ok ? await buyRes.json() : [];
-      const review: Book[] = reviewRes.ok ? await reviewRes.json() : [];
-      return [...buy, ...review];
+      ];
+      // For greatbookprices1, also fetch REJECT books
+      if (seller === 'greatbookprices1') {
+        fetches.push(
+          fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.REJECT&limit=50`, {
+            headers: HEADERS
+          })
+        );
+      }
+      const responses = await Promise.all(fetches);
+      const buy: Book[] = responses[0].ok ? await responses[0].json() : [];
+      const review: Book[] = responses[1].ok ? await responses[1].json() : [];
+      const reject: Book[] = responses[2]?.ok ? await responses[2].json() : [];
+      return [...buy, ...review, ...reject];
     } catch (error) {
       console.error(`Error fetching ${seller}:`, error);
       return [];
