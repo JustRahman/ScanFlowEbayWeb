@@ -639,7 +639,7 @@ export default function Home() {
                 <span className="platform-price">N/A</span>
               </span>
             )}
-            {book._source === 'bookfinder' ? (
+            {book._source === 'amazon' ? null : book._source === 'bookfinder' ? (
               book.url ? (
                 <a href={book.url} target="_blank" rel="noopener noreferrer" className="platform-btn ebay" onClick={() => recordClick(book.id, book.isbn, book.seller, book._source)}>
                   <span className="platform-name">{getMarketplace(book.url)}</span>
