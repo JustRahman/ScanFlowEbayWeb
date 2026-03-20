@@ -59,7 +59,7 @@ interface Book {
   edition?: string;
   pounds?: number;
   source_scraped_at?: string;
-  _source?: 'ebay' | 'bookfinder';
+  _source?: 'ebay' | 'bookfinder' | 'amazon';
 }
 
 const SELLERS: { id: Seller; label: string }[] = [
