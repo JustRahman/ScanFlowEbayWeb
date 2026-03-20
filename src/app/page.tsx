@@ -768,14 +768,6 @@ export default function Home() {
               BooksFinder
               <span className="count">{sellerCounts.bookfinder ?? '-'}</span>
             </button>
-            <button
-              key="amazon"
-              className={`source-btn ${activeSeller === 'amazon' ? 'active' : ''}`}
-              onClick={() => setActiveSeller('amazon')}
-            >
-              Amazon
-              <span className="count">{sellerCounts.amazon ?? '-'}</span>
-            </button>
           </div>
         </div>
 
