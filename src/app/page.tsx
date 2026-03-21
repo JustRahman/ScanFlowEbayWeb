@@ -8,13 +8,14 @@ const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const TABLE = 'ebay_books';
 const BF_TABLE = 'bookfinder_deals';
 const AM_TABLE = 'amazon_books';
+const CB_TABLE = 'christianbook_books';
 const HEADERS = {
   'apikey': SUPABASE_KEY,
   'Authorization': `Bearer ${SUPABASE_KEY}`,
 };
 
 type Seller = 'booksrun' | 'oneplanetbooks' | 'thriftbooks.store' | 'betterworldbooks' | 'greenworldbooks' | 'greatbookprices1' | 'betterworldbookswest';
-type ActiveSource = Seller | 'bookfinder' | 'amazon';
+type ActiveSource = Seller | 'bookfinder' | 'amazon' | 'christianbook';
 type DecisionFilter = 'all' | 'BUY' | 'REVIEW' | 'REJECT';
 type PriceFilter = 'all' | '0-5' | '5-10' | '10-20' | '20+';
 type FormatFilter = 'all' | 'Paperback' | 'Hardcover';
@@ -59,7 +60,8 @@ interface Book {
   edition?: string;
   pounds?: number;
   source_scraped_at?: string;
-  _source?: 'ebay' | 'bookfinder' | 'amazon';
+  _source?: 'ebay' | 'bookfinder' | 'amazon' | 'christianbook';
+  source_url?: string;
 }
 
 const SELLERS: { id: Seller; label: string }[] = [
@@ -128,6 +130,7 @@ export default function Home() {
   const [allBwbWest, setAllBwbWest] = useState<Book[]>([]);
   const [allBookfinder, setAllBookfinder] = useState<Book[]>([]);
   const [allAmazon, setAllAmazon] = useState<Book[]>([]);
+  const [allChristianbook, setAllChristianbook] = useState<Book[]>([]);
 
   // ── Stats counts (lightweight, no full rows) ──
   const [statCounts, setStatCounts] = useState<Record<ActiveSource, { total: number; buy: number; review: number; reject: number; bought: number; today: number }>>({
@@ -140,6 +143,7 @@ export default function Home() {
     betterworldbookswest: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
     bookfinder: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
     amazon: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
+    christianbook: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
   });
 
   // ── Fetch current displayed set (25 BUY + 25 REVIEW already marked displayed=1) ──
@@ -242,6 +246,40 @@ export default function Home() {
     }
   }, []);
 
+  // ── Fetch ChristianBook books (prices in cents, no displayed column, fetch all BUY+REVIEW) ──
+  const fetchChristianbookBooks = useCallback(async (): Promise<Book[]> => {
+    try {
+      const [buyRes, reviewRes] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/${CB_TABLE}?select=*&order=scraped_at.desc&decision=eq.BUY`, {
+          headers: HEADERS
+        }),
+        fetch(`${SUPABASE_URL}/rest/v1/${CB_TABLE}?select=*&order=scraped_at.desc&decision=eq.REVIEW`, {
+          headers: HEADERS
+        }),
+      ]);
+      const buy = buyRes.ok ? await buyRes.json() : [];
+      const review = reviewRes.ok ? await reviewRes.json() : [];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return [...buy, ...review].map((b: any) => ({
+        ...b,
+        ebay_url: '',
+        ebay_item_id: '',
+        shipping: 0,
+        category: '',
+        book_type: null,
+        weight_oz: null,
+        condition: null,
+        seller: 'ChristianBook',
+        displayed: 1,
+        source_url: b.source_url || null,
+        _source: 'christianbook' as const,
+      }));
+    } catch (error) {
+      console.error('Error fetching christianbook:', error);
+      return [];
+    }
+  }, []);
+
   // ── Fetch stat counts per seller (single lightweight query) ──
   const fetchStatCounts = useCallback(async () => {
     try {
@@ -293,6 +331,18 @@ export default function Home() {
         total: bfParseCount(amTotalRes), buy: bfParseCount(amBuyRes), review: bfParseCount(amReviewRes),
         reject: bfParseCount(amRejectRes), bought: bfParseCount(amBoughtRes), today: 0,
       };
+      // Fetch christianbook stats
+      const [cbTotalRes, cbBuyRes, cbReviewRes, cbRejectRes, cbBoughtRes] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/${CB_TABLE}?select=id`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${SUPABASE_URL}/rest/v1/${CB_TABLE}?select=id&decision=eq.BUY`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${SUPABASE_URL}/rest/v1/${CB_TABLE}?select=id&decision=eq.REVIEW`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${SUPABASE_URL}/rest/v1/${CB_TABLE}?select=id&decision=eq.REJECT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${SUPABASE_URL}/rest/v1/${CB_TABLE}?select=id&decision=eq.BOUGHT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+      ]);
+      counts.christianbook = {
+        total: bfParseCount(cbTotalRes), buy: bfParseCount(cbBuyRes), review: bfParseCount(cbReviewRes),
+        reject: bfParseCount(cbRejectRes), bought: bfParseCount(cbBoughtRes), today: 0,
+      };
       setStatCounts(counts);
     } catch (error) {
       console.error('Error fetching stat counts:', error);
@@ -303,7 +353,7 @@ export default function Home() {
   useEffect(() => {
     async function loadAll() {
       setLoading(true);
-      const [booksrun, oneplanet, thriftbooks, bwb, greenworld, greatbook, bwbwest, bookfinder, amazonBooks] = await Promise.all([
+      const [booksrun, oneplanet, thriftbooks, bwb, greenworld, greatbook, bwbwest, bookfinder, amazonBooks, cbBooks] = await Promise.all([
         fetchBooksForSeller('booksrun'),
         fetchBooksForSeller('oneplanetbooks'),
         fetchBooksForSeller('thriftbooks.store'),
@@ -313,6 +363,7 @@ export default function Home() {
         fetchBooksForSeller('betterworldbookswest'),
         fetchBookfinderBooks(),
         fetchAmazonBooks(),
+        fetchChristianbookBooks(),
       ]);
       setAllBooksrun(booksrun);
       setAllOneplanet(oneplanet);
@@ -323,11 +374,12 @@ export default function Home() {
       setAllBwbWest(bwbwest);
       setAllBookfinder(bookfinder);
       setAllAmazon(amazonBooks);
+      setAllChristianbook(cbBooks);
       setLoading(false);
     }
     loadAll();
     fetchStatCounts();
-  }, [fetchBooksForSeller, fetchBookfinderBooks, fetchAmazonBooks, fetchStatCounts]);
+  }, [fetchBooksForSeller, fetchBookfinderBooks, fetchAmazonBooks, fetchChristianbookBooks, fetchStatCounts]);
 
   // ── "Did you buy?" modal on tab return ──
   useEffect(() => {
@@ -345,11 +397,11 @@ export default function Home() {
   const handleBuyConfirm = async () => {
     if (!buyModalBook) return;
     try {
-      const table = buyModalBook._source === 'bookfinder' ? BF_TABLE : buyModalBook._source === 'amazon' ? AM_TABLE : TABLE;
+      const table = buyModalBook._source === 'bookfinder' ? BF_TABLE : buyModalBook._source === 'amazon' ? AM_TABLE : buyModalBook._source === 'christianbook' ? CB_TABLE : TABLE;
       const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${buyModalBook.id}`, {
         method: 'PATCH',
         headers: { ...HEADERS, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-        body: JSON.stringify(buyModalBook._source === 'amazon' ? { decision: 'BOUGHT' } : { decision: 'BOUGHT', bought_at: new Date().toISOString() }),
+        body: JSON.stringify(buyModalBook._source === 'amazon' || buyModalBook._source === 'christianbook' ? { decision: 'BOUGHT' } : { decision: 'BOUGHT', bought_at: new Date().toISOString() }),
       });
       if (response.ok) {
         const removeBook = (books: Book[]) => books.filter(b => b.id !== buyModalBook.id);
@@ -363,8 +415,9 @@ export default function Home() {
           betterworldbookswest: setAllBwbWest,
           bookfinder: setAllBookfinder,
           amazon: setAllAmazon,
+          christianbook: setAllChristianbook,
         };
-        const source: ActiveSource = buyModalBook._source === 'bookfinder' ? 'bookfinder' : buyModalBook._source === 'amazon' ? 'amazon' : (buyModalBook.seller as Seller);
+        const source: ActiveSource = buyModalBook._source === 'bookfinder' ? 'bookfinder' : buyModalBook._source === 'amazon' ? 'amazon' : buyModalBook._source === 'christianbook' ? 'christianbook' : (buyModalBook.seller as Seller);
         if (setterMap[source]) setterMap[source](removeBook);
         setStatCounts(prev => ({
           ...prev,
@@ -394,9 +447,10 @@ export default function Home() {
       betterworldbookswest: allBwbWest,
       bookfinder: allBookfinder,
       amazon: allAmazon,
+      christianbook: allChristianbook,
     };
     return map[activeSeller];
-  }, [activeSeller, allBooksrun, allOneplanet, allThriftbooks, allBwb, allGreenworld, allGreatbook, allBwbWest, allBookfinder, allAmazon]);
+  }, [activeSeller, allBooksrun, allOneplanet, allThriftbooks, allBwb, allGreenworld, allGreatbook, allBwbWest, allBookfinder, allAmazon, allChristianbook]);
 
   // ── Seller counts (BUY count for each) ──
   const sellerCounts = useMemo(() => ({
@@ -409,6 +463,7 @@ export default function Home() {
     betterworldbookswest: statCounts.betterworldbookswest.buy,
     bookfinder: statCounts.bookfinder.buy,
     amazon: statCounts.amazon.buy,
+    christianbook: statCounts.christianbook.buy,
   }), [statCounts]);
 
   // ── Stats (from count queries, not full rows) ──
@@ -493,11 +548,11 @@ export default function Home() {
 
     try {
       const updateData: Record<string, string> = { decision: action };
-      if (action === 'BOUGHT' && activeSeller !== 'amazon') {
+      if (action === 'BOUGHT' && activeSeller !== 'amazon' && activeSeller !== 'christianbook') {
         updateData.bought_at = new Date().toISOString();
       }
 
-      const table = activeSeller === 'bookfinder' ? BF_TABLE : activeSeller === 'amazon' ? AM_TABLE : TABLE;
+      const table = activeSeller === 'bookfinder' ? BF_TABLE : activeSeller === 'amazon' ? AM_TABLE : activeSeller === 'christianbook' ? CB_TABLE : TABLE;
       const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${bookId}`, {
         method: 'PATCH',
         headers: {
@@ -523,6 +578,7 @@ export default function Home() {
         betterworldbookswest: setAllBwbWest,
         bookfinder: setAllBookfinder,
         amazon: setAllAmazon,
+        christianbook: setAllChristianbook,
       };
       setterMap[activeSeller](removeBook);
     } catch (error) {
@@ -559,8 +615,7 @@ export default function Home() {
     const key = source === 'bookfinder' ? `bf:${isbn}` : `${isbn}:${seller}`;
     if (clickedIsbns.current.has(key)) return;
     clickedIsbns.current.add(key);
-    if (source === 'amazon') {
-      // No separate click table for amazon_books
+    if (source === 'amazon' || source === 'christianbook') {
       return;
     }
     if (source === 'bookfinder') {
@@ -667,7 +722,14 @@ export default function Home() {
                 <span className="platform-price">N/A</span>
               </span>
             )}
-            {book._source === 'amazon' ? null : book._source === 'bookfinder' ? (
+            {book._source === 'amazon' ? null : book._source === 'christianbook' ? (
+              book.source_url ? (
+                <a href={book.source_url} target="_blank" rel="noopener noreferrer" className="platform-btn website" onClick={() => recordClick(book.id, book.isbn, book.seller, book._source)}>
+                  <span className="platform-name">ChristianBook</span>
+                  <span className="platform-price">${buyPrice.toFixed(2)}</span>
+                </a>
+              ) : null
+            ) : book._source === 'bookfinder' ? (
               book.url ? (
                 <a href={book.url} target="_blank" rel="noopener noreferrer" className="platform-btn ebay" onClick={() => recordClick(book.id, book.isbn, book.seller, book._source)}>
                   <span className="platform-name">{getMarketplace(book.url)}</span>
@@ -773,8 +835,8 @@ export default function Home() {
     <>
       {/* Header */}
       <div className="header">
-        <h1>{activeSeller === 'bookfinder' ? 'BooksFinder' : activeSeller === 'amazon' ? 'Amazon' : (SELLERS.find(s => s.id === activeSeller)?.label ?? activeSeller)} Deals</h1>
-        <p>{activeSeller === 'bookfinder' ? 'Books from BooksFinder' : activeSeller === 'amazon' ? 'Books from Amazon' : `Books from ${SELLERS.find(s => s.id === activeSeller)?.label ?? activeSeller} on eBay`}</p>
+        <h1>{activeSeller === 'bookfinder' ? 'BooksFinder' : activeSeller === 'amazon' ? 'Amazon' : activeSeller === 'christianbook' ? 'ChristianBook' : (SELLERS.find(s => s.id === activeSeller)?.label ?? activeSeller)} Deals</h1>
+        <p>{activeSeller === 'bookfinder' ? 'Books from BooksFinder' : activeSeller === 'amazon' ? 'Books from Amazon' : activeSeller === 'christianbook' ? 'Books from ChristianBook.com' : `Books from ${SELLERS.find(s => s.id === activeSeller)?.label ?? activeSeller} on eBay`}</p>
 
         <div className="source-toggle-container">
           <div className="source-toggle">
@@ -795,6 +857,14 @@ export default function Home() {
             >
               BooksFinder
               <span className="count">{sellerCounts.bookfinder ?? '-'}</span>
+            </button>
+            <button
+              key="christianbook"
+              className={`source-btn ${activeSeller === 'christianbook' ? 'active' : ''}`}
+              onClick={() => setActiveSeller('christianbook')}
+            >
+              ChristianBook
+              <span className="count">{sellerCounts.christianbook ?? '-'}</span>
             </button>
           </div>
         </div>
@@ -822,7 +892,7 @@ export default function Home() {
           disabled={notifySent}
           onClick={async () => {
             setNotifySent(true);
-            const seller = activeSeller === 'bookfinder' ? 'BooksFinder' : activeSeller === 'amazon' ? 'Amazon' : (SELLERS.find(s => s.id === activeSeller)?.label ?? activeSeller);
+            const seller = activeSeller === 'bookfinder' ? 'BooksFinder' : activeSeller === 'amazon' ? 'Amazon' : activeSeller === 'christianbook' ? 'ChristianBook' : (SELLERS.find(s => s.id === activeSeller)?.label ?? activeSeller);
             await fetch('/api/notify', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
