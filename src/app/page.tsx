@@ -268,7 +268,7 @@ export default function Home() {
         category: '',
         book_type: null,
         weight_oz: null,
-        condition: null,
+        condition: 'New',
         seller: 'ChristianBook',
         displayed: 1,
         source_url: b.source_url || null,
@@ -861,7 +861,7 @@ export default function Home() {
             <button
               key="christianbook"
               className={`source-btn ${activeSeller === 'christianbook' ? 'active' : ''}`}
-              onClick={() => setActiveSeller('christianbook')}
+              onClick={() => { setActiveSeller('christianbook'); setHasanFilter(false); }}
             >
               ChristianBook
               <span className="count">{sellerCounts.christianbook ?? '-'}</span>
