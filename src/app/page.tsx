@@ -844,7 +844,7 @@ export default function Home() {
               <button
                 key={s.id}
                 className={`source-btn ${activeSeller === s.id ? 'active' : ''}`}
-                onClick={() => setActiveSeller(s.id)}
+                onClick={() => { setActiveSeller(s.id); setHasanFilter(true); }}
               >
                 {s.label}
                 <span className="count">{sellerCounts[s.id] ?? '-'}</span>
@@ -853,7 +853,7 @@ export default function Home() {
             <button
               key="bookfinder"
               className={`source-btn ${activeSeller === 'bookfinder' ? 'active' : ''}`}
-              onClick={() => setActiveSeller('bookfinder')}
+              onClick={() => { setActiveSeller('bookfinder'); setHasanFilter(true); }}
             >
               BooksFinder
               <span className="count">{sellerCounts.bookfinder ?? '-'}</span>
