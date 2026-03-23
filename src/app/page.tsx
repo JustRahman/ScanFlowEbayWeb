@@ -924,7 +924,7 @@ export default function Home() {
             <button
               key="ebay_new"
               className={`source-btn ${activeSeller === 'ebay_new' ? 'active' : ''}`}
-              onClick={() => { setActiveSeller('ebay_new'); setHasanFilter(true); }}
+              onClick={() => { setActiveSeller('ebay_new'); setHasanFilter(false); }}
             >
               eBay New
               <span className="count">{sellerCounts.ebay_new ?? '-'}</span>
