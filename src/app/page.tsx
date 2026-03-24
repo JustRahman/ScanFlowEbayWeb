@@ -92,7 +92,7 @@ function numericItemId(id: string): string {
   return id.includes('|') ? id.split('|')[1] : id;
 }
 
-const PASSWORD = 'rfvtgb123';
+const PASSWORD = '123123123';
 
 export default function Home() {
   const [authed, setAuthed] = useState(() => {
