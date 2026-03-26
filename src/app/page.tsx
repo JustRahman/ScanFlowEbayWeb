@@ -660,8 +660,9 @@ export default function Home() {
   };
 
   const isNewBook = (book: Book) => {
-    if (!book.displayed_at) return false;
-    const date = new Date(book.displayed_at);
+    const dateStr = book.evaluated_at || book.displayed_at;
+    if (!dateStr) return false;
+    const date = new Date(dateStr);
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     return date > twentyFourHoursAgo;
   };
