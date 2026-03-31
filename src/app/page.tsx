@@ -93,11 +93,16 @@ function numericItemId(id: string): string {
   return id.includes('|') ? id.split('|')[1] : id;
 }
 
-const PASSWORD = '123123123';
+const PASSWORD_CLIENT = '131313';
+const PASSWORD_GHOST = '456456';
 
 export default function Home() {
   const [authed, setAuthed] = useState(() => {
     if (typeof window !== 'undefined') return sessionStorage.getItem('scanflow_auth') === '1';
+    return false;
+  });
+  const [isGhost, setIsGhost] = useState(() => {
+    if (typeof window !== 'undefined') return sessionStorage.getItem('scanflow_ghost') === '1';
     return false;
   });
   const [pw, setPw] = useState('');
@@ -136,6 +141,7 @@ export default function Home() {
   const [allAmazon, setAllAmazon] = useState<Book[]>([]);
   const [allChristianbook, setAllChristianbook] = useState<Book[]>([]);
   const [allEbayNew, setAllEbayNew] = useState<Book[]>([]);
+  const [unseenIds, setUnseenIds] = useState<Set<string>>(new Set());
 
   // ── Stats counts (lightweight, no full rows) ──
   const [statCounts, setStatCounts] = useState<Record<ActiveSource, { total: number; buy: number; review: number; reject: number; bought: number; today: number }>>({
@@ -153,21 +159,21 @@ export default function Home() {
     ebay_new: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
   });
 
-  // ── Fetch current displayed set (25 BUY + 25 REVIEW already marked displayed=1) ──
+  // ── Fetch all BUY + REVIEW books for a seller (real-time, no rotation) ──
   const fetchBooksForSeller = useCallback(async (seller: string): Promise<Book[]> => {
     try {
       const fetches: Promise<Response>[] = [
-        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.BUY&display=eq.1&limit=25`, {
+        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.BUY`, {
           headers: HEADERS
         }),
-        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.REVIEW&display=eq.1&limit=25`, {
+        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.REVIEW`, {
           headers: HEADERS
         }),
       ];
       // For greatbookprices1, also fetch REJECT books
       if (seller === 'greatbookprices1') {
         fetches.push(
-          fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.REJECT&limit=50`, {
+          fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.REJECT`, {
             headers: HEADERS
           })
         );
@@ -187,10 +193,10 @@ export default function Home() {
   const fetchBookfinderBooks = useCallback(async (): Promise<Book[]> => {
     try {
       const [buyRes, reviewRes] = await Promise.all([
-        fetch(`${SUPABASE_URL}/rest/v1/${BF_TABLE}?select=*&order=source_scraped_at.desc&decision=eq.BUY&displayed=eq.1&limit=25`, {
+        fetch(`${SUPABASE_URL}/rest/v1/${BF_TABLE}?select=*&order=source_scraped_at.desc&decision=eq.BUY`, {
           headers: HEADERS
         }),
-        fetch(`${SUPABASE_URL}/rest/v1/${BF_TABLE}?select=*&order=source_scraped_at.desc&decision=eq.REVIEW&displayed=eq.1&limit=25`, {
+        fetch(`${SUPABASE_URL}/rest/v1/${BF_TABLE}?select=*&order=source_scraped_at.desc&decision=eq.REVIEW`, {
           headers: HEADERS
         }),
       ]);
@@ -423,6 +429,35 @@ export default function Home() {
       setAllAmazon(amazonBooks);
       setAllChristianbook(cbBooks);
       setAllEbayNew(ebayNewBooks);
+
+      // ── Track unseen books via localStorage (client only, ghost skips) ──
+      const ghostMode = sessionStorage.getItem('scanflow_ghost') === '1';
+      if (!ghostMode) {
+        const allLoaded = [
+          ...booksrun.map(b => `ebay:${b.id}`),
+          ...oneplanet.map(b => `ebay:${b.id}`),
+          ...thriftbooks.map(b => `ebay:${b.id}`),
+          ...bwb.map(b => `ebay:${b.id}`),
+          ...greenworld.map(b => `ebay:${b.id}`),
+          ...greatbook.map(b => `ebay:${b.id}`),
+          ...bwbwest.map(b => `ebay:${b.id}`),
+          ...zuber.map(b => `ebay:${b.id}`),
+          ...bookfinder.map(b => `bf:${b.id}`),
+          ...amazonBooks.map(b => `am:${b.id}`),
+          ...cbBooks.map(b => `cb:${b.id}`),
+          ...ebayNewBooks.map(b => `en:${b.id}`),
+        ];
+        const stored = localStorage.getItem('scanflow_seen');
+        const seenSet = stored ? new Set<string>(JSON.parse(stored)) : new Set<string>();
+        const unseen = new Set<string>();
+        for (const key of allLoaded) {
+          if (!seenSet.has(key)) unseen.add(key);
+        }
+        setUnseenIds(unseen);
+        // Save current IDs as seen for next visit
+        localStorage.setItem('scanflow_seen', JSON.stringify(allLoaded));
+      }
+
       setLoading(false);
     }
     loadAll();
@@ -701,9 +736,11 @@ export default function Home() {
     const soldPerMonth = book.sales_rank_drops_90 != null ? Math.round(book.sales_rank_drops_90 / 3) : null;
     const weightLbs = book.weight_oz ? (book.weight_oz / 16).toFixed(1) : null;
     const bookIsNew = isNewBook(book);
+    const sourcePrefix = book._source === 'bookfinder' ? 'bf' : book._source === 'amazon' ? 'am' : book._source === 'christianbook' ? 'cb' : book._source === 'ebay_new' ? 'en' : 'ebay';
+    const isUnseen = unseenIds.has(`${sourcePrefix}:${book.id}`);
 
     return (
-      <div key={book.id} className="book-card">
+      <div key={book.id} className={`book-card${isUnseen ? ' unseen' : ''}`}>
         <div className="book-card-content">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
             {book.decision ? (
@@ -864,8 +901,15 @@ export default function Home() {
           <p style={{ color: '#888', fontSize: '0.9rem', marginBottom: '1.5rem' }}>Enter password to continue</p>
           <form onSubmit={e => {
             e.preventDefault();
-            if (pw === PASSWORD) {
+            if (pw === PASSWORD_CLIENT || pw === PASSWORD_GHOST) {
               sessionStorage.setItem('scanflow_auth', '1');
+              if (pw === PASSWORD_GHOST) {
+                sessionStorage.setItem('scanflow_ghost', '1');
+                setIsGhost(true);
+              } else {
+                sessionStorage.removeItem('scanflow_ghost');
+                setIsGhost(false);
+              }
               setAuthed(true);
             } else {
               setPwError(true);
