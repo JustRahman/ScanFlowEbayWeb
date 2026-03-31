@@ -50,6 +50,7 @@ interface Book {
   weight_oz: number | null;
   evaluated_at: string | null;
   bought_at: string | null;
+  display: number;
   displayed: number;
   displayed_at: string | null;
   seller_url: string | null;
@@ -156,10 +157,10 @@ export default function Home() {
   const fetchBooksForSeller = useCallback(async (seller: string): Promise<Book[]> => {
     try {
       const fetches: Promise<Response>[] = [
-        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.BUY&displayed=eq.1&limit=25`, {
+        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.BUY&display=eq.1&limit=25`, {
           headers: HEADERS
         }),
-        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.REVIEW&displayed=eq.1&limit=25`, {
+        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.REVIEW&display=eq.1&limit=25`, {
           headers: HEADERS
         }),
       ];
@@ -903,41 +904,49 @@ export default function Home() {
         <p>{activeSeller === 'bookfinder' ? 'Books from BooksFinder' : activeSeller === 'amazon' ? 'Books from Amazon' : activeSeller === 'christianbook' ? 'Books from ChristianBook.com' : activeSeller === 'ebay_new' ? 'New books from eBay' : `Books from ${SELLERS.find(s => s.id === activeSeller)?.label ?? activeSeller} on eBay`}</p>
 
         <div className="source-toggle-container">
-          <div className="source-toggle">
-            {SELLERS.map(s => (
+          <div className="source-toggle-group">
+            <div className="source-toggle-label">eBay Sellers</div>
+            <div className="source-toggle">
+              {SELLERS.map(s => (
+                <button
+                  key={s.id}
+                  className={`source-btn ${activeSeller === s.id ? 'active' : ''}`}
+                  onClick={() => { setActiveSeller(s.id); setHasanFilter(true); }}
+                >
+                  {s.label}
+                  <span className="count">{sellerCounts[s.id] ?? '-'}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="source-toggle-group">
+            <div className="source-toggle-label">Other Sources</div>
+            <div className="source-toggle">
               <button
-                key={s.id}
-                className={`source-btn ${activeSeller === s.id ? 'active' : ''}`}
-                onClick={() => { setActiveSeller(s.id); setHasanFilter(true); }}
+                key="bookfinder"
+                className={`source-btn ${activeSeller === 'bookfinder' ? 'active' : ''}`}
+                onClick={() => { setActiveSeller('bookfinder'); setHasanFilter(true); }}
               >
-                {s.label}
-                <span className="count">{sellerCounts[s.id] ?? '-'}</span>
+                BooksFinder
+                <span className="count">{sellerCounts.bookfinder ?? '-'}</span>
               </button>
-            ))}
-            <button
-              key="bookfinder"
-              className={`source-btn ${activeSeller === 'bookfinder' ? 'active' : ''}`}
-              onClick={() => { setActiveSeller('bookfinder'); setHasanFilter(true); }}
-            >
-              BooksFinder
-              <span className="count">{sellerCounts.bookfinder ?? '-'}</span>
-            </button>
-            <button
-              key="ebay_new"
-              className={`source-btn ${activeSeller === 'ebay_new' ? 'active' : ''}`}
-              onClick={() => { setActiveSeller('ebay_new'); setHasanFilter(false); }}
-            >
-              eBay New
-              <span className="count">{sellerCounts.ebay_new ?? '-'}</span>
-            </button>
-            <button
-              key="christianbook"
-              className={`source-btn ${activeSeller === 'christianbook' ? 'active' : ''}`}
-              onClick={() => { setActiveSeller('christianbook'); setHasanFilter(false); }}
-            >
-              ChristianBook
-              <span className="count">{sellerCounts.christianbook ?? '-'}</span>
-            </button>
+              <button
+                key="ebay_new"
+                className={`source-btn ${activeSeller === 'ebay_new' ? 'active' : ''}`}
+                onClick={() => { setActiveSeller('ebay_new'); setHasanFilter(false); }}
+              >
+                eBay New
+                <span className="count">{sellerCounts.ebay_new ?? '-'}</span>
+              </button>
+              <button
+                key="christianbook"
+                className={`source-btn ${activeSeller === 'christianbook' ? 'active' : ''}`}
+                onClick={() => { setActiveSeller('christianbook'); setHasanFilter(false); }}
+              >
+                ChristianBook
+                <span className="count">{sellerCounts.christianbook ?? '-'}</span>
+              </button>
+            </div>
           </div>
         </div>
 

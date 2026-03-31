@@ -34,12 +34,31 @@ body {
 
 .source-toggle-container {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
   margin-top: 1rem;
+  gap: 0.5rem;
+}
+
+.source-toggle-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.source-toggle-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: rgba(255, 255, 255, 0.5);
+  font-weight: 600;
 }
 
 .source-toggle {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   background: rgba(255, 255, 255, 0.15);
   backdrop-filter: blur(10px);
   border-radius: 50px;
