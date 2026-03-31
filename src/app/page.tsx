@@ -98,7 +98,15 @@ const PASSWORD_GHOST = '456456';
 
 export default function Home() {
   const [authed, setAuthed] = useState(() => {
-    if (typeof window !== 'undefined') return sessionStorage.getItem('scanflow_auth') === '1';
+    if (typeof window !== 'undefined') {
+      // Invalidate old sessions that don't have the version flag
+      if (sessionStorage.getItem('scanflow_auth') === '1' && sessionStorage.getItem('scanflow_v') !== '2') {
+        sessionStorage.removeItem('scanflow_auth');
+        sessionStorage.removeItem('scanflow_ghost');
+        return false;
+      }
+      return sessionStorage.getItem('scanflow_auth') === '1';
+    }
     return false;
   });
   const [isGhost, setIsGhost] = useState(() => {
@@ -903,6 +911,7 @@ export default function Home() {
             e.preventDefault();
             if (pw === PASSWORD_CLIENT || pw === PASSWORD_GHOST) {
               sessionStorage.setItem('scanflow_auth', '1');
+              sessionStorage.setItem('scanflow_v', '2');
               if (pw === PASSWORD_GHOST) {
                 sessionStorage.setItem('scanflow_ghost', '1');
                 setIsGhost(true);
