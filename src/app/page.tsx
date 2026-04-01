@@ -573,6 +573,9 @@ export default function Home() {
       // Decision filter (was server-side, now client-side)
       if (decisionFilter !== 'all' && book.decision !== decisionFilter) return false;
 
+      // ChristianBook: min $20 Amazon price
+      if (activeSeller === 'christianbook' && (book.amazon_price == null || book.amazon_price < 2000)) return false;
+
       // Search
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
