@@ -50,6 +50,7 @@ interface Book {
   weight_oz: number | null;
   evaluated_at: string | null;
   bought_at: string | null;
+  quantity: number | null;
   display: number;
   displayed: number;
   displayed_at: string | null;
@@ -492,7 +493,7 @@ export default function Home() {
       const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${buyModalBook.id}`, {
         method: 'PATCH',
         headers: { ...HEADERS, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-        body: JSON.stringify(buyModalBook._source === 'amazon' || buyModalBook._source === 'christianbook' ? { decision: 'BOUGHT' } : { decision: 'BOUGHT', bought_at: new Date().toISOString() }),
+        body: JSON.stringify(buyModalBook._source === 'amazon' || buyModalBook._source === 'christianbook' ? { decision: 'BOUGHT', quantity: parseInt(buyQuantity) || 1 } : { decision: 'BOUGHT', bought_at: new Date().toISOString(), quantity: parseInt(buyQuantity) || 1 }),
 
       });
       if (response.ok) {
