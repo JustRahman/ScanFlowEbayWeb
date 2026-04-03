@@ -121,6 +121,7 @@ export default function Home() {
   const clickedIsbns = useRef<Set<string>>(new Set());
   const lastClickedBook = useRef<{ id: number; isbn: string; seller: string; _source?: string } | null>(null);
   const [buyModalBook, setBuyModalBook] = useState<{ id: number; isbn: string; seller: string; _source?: string } | null>(null);
+  const [buyQuantity, setBuyQuantity] = useState('1');
   const [notifySent, setNotifySent] = useState(false);
 
   // Filters
@@ -526,6 +527,7 @@ export default function Home() {
       console.error('Error marking as bought:', error);
     }
     setBuyModalBook(null);
+    setBuyQuantity('1');
   };
 
   // ── Active seller's books (derived, no extra state) ──
@@ -1053,24 +1055,44 @@ export default function Home() {
           position: 'fixed', inset: 0, zIndex: 9999,
           background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }} onClick={() => setBuyModalBook(null)}>
+        }} onClick={() => { setBuyModalBook(null); setBuyQuantity('1'); }}>
           <div style={{
             background: '#fff', borderRadius: '1rem', padding: '2.5rem 2rem',
             minWidth: '360px', maxWidth: '420px',
             textAlign: 'center', boxShadow: '0 24px 48px rgba(0,0,0,0.2)',
             animation: 'modalIn 0.2s ease-out',
           }} onClick={e => e.stopPropagation()}>
-            <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>Did you buy this book?</div>
+            <div style={{ fontSize: '1.6rem', fontWeight: 700, marginBottom: '0.75rem', color: '#333' }}>Did you buy this book?</div>
             <div style={{
               display: 'inline-block', background: '#f0f0f5', borderRadius: '0.5rem',
-              padding: '0.4rem 1rem', color: '#555', fontSize: '0.95rem', marginBottom: '1.75rem',
+              padding: '0.4rem 1rem', color: '#555', fontSize: '0.95rem', marginBottom: '1.25rem',
               fontFamily: 'monospace', letterSpacing: '0.5px',
             }}>
               ISBN: {buyModalBook.isbn}
             </div>
+            <div style={{ marginBottom: '0.5rem', textAlign: 'left' }}>
+              <label style={{ fontSize: '0.85rem', color: '#666', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>
+                Quantity
+              </label>
+              <input
+                type="number"
+                min="1"
+                value={buyQuantity}
+                onChange={e => setBuyQuantity(e.target.value)}
+                style={{
+                  width: '100%', padding: '0.6rem 0.75rem', borderRadius: '0.5rem',
+                  border: '1px solid #ddd', fontSize: '1rem', outline: 'none',
+                  boxSizing: 'border-box',
+                }}
+                autoFocus
+              />
+            </div>
+            <div style={{ fontSize: '0.78rem', color: '#999', marginBottom: '1.5rem', textAlign: 'left', lineHeight: 1.5 }}>
+              Abi, bu bir ISBN numarasına ait kitaptan kaç kopya satın aldığını gösteriyor (örneğin, 9785838538394 numaralı kitaptan 5 kopya aldın).
+            </div>
             <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
               <button
-                onClick={() => setBuyModalBook(null)}
+                onClick={() => { setBuyModalBook(null); setBuyQuantity('1'); }}
                 style={{
                   padding: '0.75rem 2rem', borderRadius: '0.5rem',
                   border: '1px solid #ddd', background: '#f5f5f5',
