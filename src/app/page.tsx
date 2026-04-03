@@ -301,14 +301,14 @@ export default function Home() {
     }
   }, []);
 
-  // ── Fetch eBay New books (ebay_books_new table, no displayed column, prices in cents) ──
+  // ── Fetch eBay New books — books from ebay_books where condition is 'New' ──
   const fetchEbayNewBooks = useCallback(async (): Promise<Book[]> => {
     try {
       const [buyRes, reviewRes] = await Promise.all([
-        fetch(`${SUPABASE_URL}/rest/v1/${EN_TABLE}?select=*&order=scraped_at.desc&decision=eq.BUY`, {
+        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc&condition=eq.Brand%20New&decision=eq.BUY`, {
           headers: HEADERS
         }),
-        fetch(`${SUPABASE_URL}/rest/v1/${EN_TABLE}?select=*&order=scraped_at.desc&decision=eq.REVIEW`, {
+        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc&condition=eq.Brand%20New&decision=eq.REVIEW`, {
           headers: HEADERS
         }),
       ]);
@@ -317,7 +317,6 @@ export default function Home() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return [...buy, ...review].map((b: any) => ({
         ...b,
-        displayed: 1,
         _source: 'ebay_new' as const,
       }));
     } catch (error) {
@@ -389,13 +388,13 @@ export default function Home() {
         total: bfParseCount(cbTotalRes), buy: bfParseCount(cbBuyRes), review: bfParseCount(cbReviewRes),
         reject: bfParseCount(cbRejectRes), bought: bfParseCount(cbBoughtRes), today: 0,
       };
-      // Fetch ebay_new stats
+      // Fetch ebay_new stats (Brand New condition books from ebay_books)
       const [enTotalRes, enBuyRes, enReviewRes, enRejectRes, enBoughtRes] = await Promise.all([
-        fetch(`${SUPABASE_URL}/rest/v1/${EN_TABLE}?select=id`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
-        fetch(`${SUPABASE_URL}/rest/v1/${EN_TABLE}?select=id&decision=eq.BUY`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
-        fetch(`${SUPABASE_URL}/rest/v1/${EN_TABLE}?select=id&decision=eq.REVIEW`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
-        fetch(`${SUPABASE_URL}/rest/v1/${EN_TABLE}?select=id&decision=eq.REJECT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
-        fetch(`${SUPABASE_URL}/rest/v1/${EN_TABLE}?select=id&decision=eq.BOUGHT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=id&condition=eq.Brand%20New`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=id&condition=eq.Brand%20New&decision=eq.BUY`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=id&condition=eq.Brand%20New&decision=eq.REVIEW`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=id&condition=eq.Brand%20New&decision=eq.REJECT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=id&condition=eq.Brand%20New&decision=eq.BOUGHT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
       ]);
       counts.ebay_new = {
         total: bfParseCount(enTotalRes), buy: bfParseCount(enBuyRes), review: bfParseCount(enReviewRes),
@@ -488,7 +487,7 @@ export default function Home() {
   const handleBuyConfirm = async () => {
     if (!buyModalBook) return;
     try {
-      const table = buyModalBook._source === 'bookfinder' ? BF_TABLE : buyModalBook._source === 'amazon' ? AM_TABLE : buyModalBook._source === 'christianbook' ? CB_TABLE : buyModalBook._source === 'ebay_new' ? EN_TABLE : TABLE;
+      const table = buyModalBook._source === 'bookfinder' ? BF_TABLE : buyModalBook._source === 'amazon' ? AM_TABLE : buyModalBook._source === 'christianbook' ? CB_TABLE : TABLE;
       const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${buyModalBook.id}`, {
         method: 'PATCH',
         headers: { ...HEADERS, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
@@ -649,11 +648,11 @@ export default function Home() {
 
     try {
       const updateData: Record<string, string> = { decision: action };
-      if (action === 'BOUGHT' && activeSeller !== 'amazon' && activeSeller !== 'christianbook' && activeSeller !== 'ebay_new') {
+      if (action === 'BOUGHT' && activeSeller !== 'amazon' && activeSeller !== 'christianbook') {
         updateData.bought_at = new Date().toISOString();
       }
 
-      const table = activeSeller === 'bookfinder' ? BF_TABLE : activeSeller === 'amazon' ? AM_TABLE : activeSeller === 'christianbook' ? CB_TABLE : activeSeller === 'ebay_new' ? EN_TABLE : TABLE;
+      const table = activeSeller === 'bookfinder' ? BF_TABLE : activeSeller === 'amazon' ? AM_TABLE : activeSeller === 'christianbook' ? CB_TABLE : TABLE;
       const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${bookId}`, {
         method: 'PATCH',
         headers: {
