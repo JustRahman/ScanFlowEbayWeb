@@ -977,6 +977,7 @@ export default function Home() {
               ))}
             </div>
           </div>
+          {process.env.NEXT_PUBLIC_TURKISH !== 'ZUBEYR' && (
           <div className="source-toggle-group">
             <div className="source-toggle-label">Other Sources</div>
             <div className="source-toggle">
@@ -1006,6 +1007,7 @@ export default function Home() {
               </button>
             </div>
           </div>
+          )}
         </div>
 
         <div className="stats">
