@@ -865,7 +865,7 @@ export default function Home() {
                     <span className="platform-price">View</span>
                   </a>
                 )}
-                {book.amazon_url && (
+                {book.amazon_url && process.env.NEXT_PUBLIC_TURKISH !== 'ZUBEYR' && (
                   <a href={book.amazon_url} target="_blank" rel="noopener noreferrer" className="platform-btn amazon-seller" onClick={() => recordClick(book.id, book.isbn, book.seller, book._source)}>
                     <span className="platform-name">{book.best_offer_seller || 'Amazon Seller'}</span>
                     <span className="platform-price">{bestOfferPrice ? `$${bestOfferPrice.toFixed(2)}` : 'View'}</span>
