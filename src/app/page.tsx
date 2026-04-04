@@ -743,7 +743,7 @@ export default function Home() {
     const buyPrice = book.price / 100;
     const amazonPrice = book.amazon_price ? book.amazon_price / 100 : null;
     const bestOfferPrice = book.best_offer_price ? book.best_offer_price / 100 : null;
-    const hasSiteLink = book.seller_url && (book.seller === 'booksrun' || book.seller === 'betterworldbooks');
+    const hasSiteLink = book.seller_url && (book.seller === 'booksrun' || book.seller === 'betterworldbooks') && process.env.NEXT_PUBLIC_TURKISH !== 'ZUBEYR';
     const salesRank = book.sales_rank;
     const roi = amazonPrice && buyPrice > 0 ? amazonPrice / buyPrice : null;
     const soldPerMonth = book.sales_rank_drops_90 != null ? Math.round(book.sales_rank_drops_90 / 3) : null;
