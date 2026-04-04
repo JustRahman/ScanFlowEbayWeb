@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 // Direct Supabase REST API — same approach as ScanFlow-ScapWeb
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const TABLE = 'ebay_books';
+const TABLE = process.env.NEXT_PUBLIC_TURKISH === 'ZUBEYR' ? 'ebay_books_zubeyr' : 'ebay_books';
 const BF_TABLE = 'bookfinder_deals';
 const AM_TABLE = 'amazon_books';
 const CB_TABLE = 'christianbook_books';
