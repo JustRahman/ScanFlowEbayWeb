@@ -1135,6 +1135,7 @@ export default function Home() {
             />
           </div>
 
+          {process.env.NEXT_PUBLIC_TURKISH !== 'ZUBEYR' && (
           <div className="filter-section">
             <div className="filter-title">Hasan Filter</div>
             <div className="filter-options">
@@ -1147,6 +1148,7 @@ export default function Home() {
               </div>
             </div>
           </div>
+          )}
 
           <div className="filter-section">
             <div className="filter-title">Decision</div>
