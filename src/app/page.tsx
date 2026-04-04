@@ -6,6 +6,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const TABLE = 'ebay_books';
+const ZUBEYR_TABLE = 'ebay_books_zubeyr';
 const BF_TABLE = 'bookfinder_deals';
 const AM_TABLE = 'amazon_books';
 const CB_TABLE = 'christianbook_books';
@@ -133,9 +134,12 @@ export default function Home() {
   const [weightFilter, setWeightFilter] = useState<WeightFilter>('all');
   const [minProfit, setMinProfit] = useState('');
   const [minRoi, setMinRoi] = useState('');
+  const [activeUser, setActiveUser] = useState<'Hasan' | 'Zubeyr'>('Hasan');
   const [hasanFilter, setHasanFilter] = useState(true);
   const [cheapOpen, setCheapOpen] = useState(true);
   const [expensiveOpen, setExpensiveOpen] = useState(true);
+
+  const ebayTable = activeUser === 'Hasan' ? TABLE : ZUBEYR_TABLE;
 
   // Store all books per seller for counts
   const [allBooksrun, setAllBooksrun] = useState<Book[]>([]);
@@ -173,17 +177,17 @@ export default function Home() {
   const fetchBooksForSeller = useCallback(async (seller: string): Promise<Book[]> => {
     try {
       const fetches: Promise<Response>[] = [
-        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.BUY`, {
+        fetch(`${SUPABASE_URL}/rest/v1/${ebayTable}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.BUY`, {
           headers: HEADERS
         }),
-        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.REVIEW`, {
+        fetch(`${SUPABASE_URL}/rest/v1/${ebayTable}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.REVIEW`, {
           headers: HEADERS
         }),
       ];
       // For greatbookprices1, also fetch REJECT books
       if (seller === 'greatbookprices1') {
         fetches.push(
-          fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.REJECT`, {
+          fetch(`${SUPABASE_URL}/rest/v1/${ebayTable}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.REJECT`, {
             headers: HEADERS
           })
         );
@@ -197,7 +201,7 @@ export default function Home() {
       console.error(`Error fetching ${seller}:`, error);
       return [];
     }
-  }, []);
+  }, [ebayTable]);
 
   // ── Fetch BooksFinder books (bookfinder_deals table, prices in dollars → convert to cents) ──
   const fetchBookfinderBooks = useCallback(async (): Promise<Book[]> => {
@@ -307,10 +311,10 @@ export default function Home() {
   const fetchEbayNewBooks = useCallback(async (): Promise<Book[]> => {
     try {
       const [buyRes, reviewRes] = await Promise.all([
-        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc&condition=eq.Brand%20New&decision=eq.BUY`, {
+        fetch(`${SUPABASE_URL}/rest/v1/${ebayTable}?select=*&order=scraped_at.desc&condition=eq.Brand%20New&decision=eq.BUY`, {
           headers: HEADERS
         }),
-        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc&condition=eq.Brand%20New&decision=eq.REVIEW`, {
+        fetch(`${SUPABASE_URL}/rest/v1/${ebayTable}?select=*&order=scraped_at.desc&condition=eq.Brand%20New&decision=eq.REVIEW`, {
           headers: HEADERS
         }),
       ]);
@@ -325,7 +329,7 @@ export default function Home() {
       console.error('Error fetching ebay_new:', error);
       return [];
     }
-  }, []);
+  }, [ebayTable]);
 
   // ── Fetch stat counts per seller (single lightweight query) ──
   const fetchStatCounts = useCallback(async () => {
@@ -334,12 +338,12 @@ export default function Home() {
       const sellers: Seller[] = ['booksrun', 'oneplanetbooks', 'thriftbooks.store', 'betterworldbooks', 'greenworldbooks', 'greatbookprices1', 'betterworldbookswest', 'zuber'];
       const results = await Promise.all(sellers.map(async (seller) => {
         const [totalRes, buyRes, reviewRes, rejectRes, boughtRes, todayRes] = await Promise.all([
-          fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=id&seller=eq.${encodeURIComponent(seller)}`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
-          fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=id&seller=eq.${encodeURIComponent(seller)}&decision=eq.BUY`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
-          fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=id&seller=eq.${encodeURIComponent(seller)}&decision=eq.REVIEW`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
-          fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=id&seller=eq.${encodeURIComponent(seller)}&decision=eq.REJECT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
-          fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=id&seller=eq.${encodeURIComponent(seller)}&decision=eq.BOUGHT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
-          fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=id&seller=eq.${encodeURIComponent(seller)}&bought_at=gte.${twentyFourHoursAgo}`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+          fetch(`${SUPABASE_URL}/rest/v1/${ebayTable}?select=id&seller=eq.${encodeURIComponent(seller)}`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+          fetch(`${SUPABASE_URL}/rest/v1/${ebayTable}?select=id&seller=eq.${encodeURIComponent(seller)}&decision=eq.BUY`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+          fetch(`${SUPABASE_URL}/rest/v1/${ebayTable}?select=id&seller=eq.${encodeURIComponent(seller)}&decision=eq.REVIEW`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+          fetch(`${SUPABASE_URL}/rest/v1/${ebayTable}?select=id&seller=eq.${encodeURIComponent(seller)}&decision=eq.REJECT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+          fetch(`${SUPABASE_URL}/rest/v1/${ebayTable}?select=id&seller=eq.${encodeURIComponent(seller)}&decision=eq.BOUGHT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+          fetch(`${SUPABASE_URL}/rest/v1/${ebayTable}?select=id&seller=eq.${encodeURIComponent(seller)}&bought_at=gte.${twentyFourHoursAgo}`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
         ]);
         const parseCount = (res: Response) => {
           const range = res.headers.get('content-range');
@@ -392,11 +396,11 @@ export default function Home() {
       };
       // Fetch ebay_new stats (Brand New condition books from ebay_books)
       const [enTotalRes, enBuyRes, enReviewRes, enRejectRes, enBoughtRes] = await Promise.all([
-        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=id&condition=eq.Brand%20New`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
-        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=id&condition=eq.Brand%20New&decision=eq.BUY`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
-        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=id&condition=eq.Brand%20New&decision=eq.REVIEW`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
-        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=id&condition=eq.Brand%20New&decision=eq.REJECT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
-        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=id&condition=eq.Brand%20New&decision=eq.BOUGHT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${SUPABASE_URL}/rest/v1/${ebayTable}?select=id&condition=eq.Brand%20New`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${SUPABASE_URL}/rest/v1/${ebayTable}?select=id&condition=eq.Brand%20New&decision=eq.BUY`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${SUPABASE_URL}/rest/v1/${ebayTable}?select=id&condition=eq.Brand%20New&decision=eq.REVIEW`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${SUPABASE_URL}/rest/v1/${ebayTable}?select=id&condition=eq.Brand%20New&decision=eq.REJECT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${SUPABASE_URL}/rest/v1/${ebayTable}?select=id&condition=eq.Brand%20New&decision=eq.BOUGHT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
       ]);
       counts.ebay_new = {
         total: bfParseCount(enTotalRes), buy: bfParseCount(enBuyRes), review: bfParseCount(enReviewRes),
@@ -406,7 +410,7 @@ export default function Home() {
     } catch (error) {
       console.error('Error fetching stat counts:', error);
     }
-  }, []);
+  }, [ebayTable]);
 
   // ── Load on mount ──
   useEffect(() => {
@@ -489,7 +493,7 @@ export default function Home() {
   const handleBuyConfirm = async () => {
     if (!buyModalBook) return;
     try {
-      const table = buyModalBook._source === 'bookfinder' ? BF_TABLE : buyModalBook._source === 'amazon' ? AM_TABLE : buyModalBook._source === 'christianbook' ? CB_TABLE : TABLE;
+      const table = buyModalBook._source === 'bookfinder' ? BF_TABLE : buyModalBook._source === 'amazon' ? AM_TABLE : buyModalBook._source === 'christianbook' ? CB_TABLE : ebayTable;
       const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${buyModalBook.id}`, {
         method: 'PATCH',
         headers: { ...HEADERS, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
@@ -655,7 +659,7 @@ export default function Home() {
         updateData.bought_at = new Date().toISOString();
       }
 
-      const table = activeSeller === 'bookfinder' ? BF_TABLE : activeSeller === 'amazon' ? AM_TABLE : activeSeller === 'christianbook' ? CB_TABLE : TABLE;
+      const table = activeSeller === 'bookfinder' ? BF_TABLE : activeSeller === 'amazon' ? AM_TABLE : activeSeller === 'christianbook' ? CB_TABLE : ebayTable;
       const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${bookId}`, {
         method: 'PATCH',
         headers: {
@@ -960,6 +964,25 @@ export default function Home() {
       <div className="header">
         <h1>{activeSeller === 'bookfinder' ? 'BooksFinder' : activeSeller === 'amazon' ? 'Amazon' : activeSeller === 'christianbook' ? 'ChristianBook' : activeSeller === 'ebay_new' ? 'eBay New' : (SELLERS.find(s => s.id === activeSeller)?.label ?? activeSeller)} Deals</h1>
         <p>{activeSeller === 'bookfinder' ? 'Books from BooksFinder' : activeSeller === 'amazon' ? 'Books from Amazon' : activeSeller === 'christianbook' ? 'Books from ChristianBook.com' : activeSeller === 'ebay_new' ? 'New books from eBay' : `Books from ${SELLERS.find(s => s.id === activeSeller)?.label ?? activeSeller} on eBay`}</p>
+
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '0.75rem' }}>
+          <div style={{ display: 'flex', background: '#f0f0f0', borderRadius: '2rem', padding: '3px', gap: '2px' }}>
+            {(['Hasan', 'Zubeyr'] as const).map(user => (
+              <button
+                key={user}
+                onClick={() => setActiveUser(user)}
+                style={{
+                  padding: '0.35rem 1.1rem', borderRadius: '2rem', border: 'none', cursor: 'pointer',
+                  fontSize: '0.85rem', fontWeight: 600, transition: 'all 0.2s',
+                  background: activeUser === user ? '#667eea' : 'transparent',
+                  color: activeUser === user ? '#fff' : '#666',
+                }}
+              >
+                {user}
+              </button>
+            ))}
+          </div>
+        </div>
 
         <div className="source-toggle-container">
           <div className="source-toggle-group">
