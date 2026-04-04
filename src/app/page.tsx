@@ -94,7 +94,7 @@ function numericItemId(id: string): string {
   return id.includes('|') ? id.split('|')[1] : id;
 }
 
-const PASSWORD_CLIENT = '131313';
+const PASSWORD_CLIENT = process.env.NEXT_PUBLIC_PASSWORD || '131313';
 const PASSWORD_GHOST = '456456';
 
 export default function Home() {
