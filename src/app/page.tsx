@@ -639,8 +639,8 @@ export default function Home() {
         }
       }
 
-      // Hasan Filter: 5x+ ROI OR $30+ Amazon price
-      if (hasanFilter) {
+      // Hasan Filter: 5x+ ROI OR $30+ Amazon price (disabled for ZUBEYR)
+      if (hasanFilter && process.env.NEXT_PUBLIC_TURKISH !== 'ZUBEYR') {
         const roi = book.amazon_price && book.price > 0 ? book.amazon_price / book.price : 0;
         const amazonDollars = book.amazon_price ? book.amazon_price / 100 : 0;
         if (roi < 5 && amazonDollars < 30) return false;
