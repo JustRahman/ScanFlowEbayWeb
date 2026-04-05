@@ -766,7 +766,7 @@ export default function Home() {
     const isUnseen = unseenIds.has(`${sourcePrefix}:${book.id}`);
 
     return (
-      <div key={book.id} className={`book-card${isUnseen ? ' unseen' : ''}`}>
+      <div key={book.id} className={`book-card${isUnseen ? ' unseen' : ''}${process.env.NEXT_PUBLIC_TURKISH === 'ZUBEYR' ? ' zubeyr-large' : ''}`}>
         <div className="book-card-content">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
             {book.decision ? (

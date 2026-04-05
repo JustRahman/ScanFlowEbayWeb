@@ -703,3 +703,18 @@ body {
     justify-content: center;
   }
 }
+
+/* ── Zubeyr large card mode ── */
+.book-card.zubeyr-large .decision-badge { font-size: 1rem; padding: 0.5rem 1rem; }
+.book-card.zubeyr-large .amazon-flag { font-size: 0.9rem; padding: 0.35rem 0.7rem; }
+.book-card.zubeyr-large .badge { font-size: 1rem; padding: 0.35rem 0.7rem; }
+.book-card.zubeyr-large .badge-seller { font-size: 0.95rem; }
+.book-card.zubeyr-large .price-label { font-size: 1rem; }
+.book-card.zubeyr-large .price-value { font-size: 1.15rem; }
+.book-card.zubeyr-large .price-value.profit,
+.book-card.zubeyr-large .price-value.loss,
+.book-card.zubeyr-large .price-value.buy { font-size: 1.15rem; }
+.book-card.zubeyr-large .rank-badge { font-size: 0.95rem; padding: 0.35rem 0.7rem; }
+.book-card.zubeyr-large .platform-btn { font-size: 0.95rem; min-height: 58px; padding: 0.7rem 0.4rem; }
+.book-card.zubeyr-large .platform-btn .platform-name { font-size: 0.85rem; }
+.book-card.zubeyr-large .platform-btn .platform-price { font-size: 1.05rem; }
