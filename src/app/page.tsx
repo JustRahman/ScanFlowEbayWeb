@@ -971,8 +971,8 @@ export default function Home() {
     <>
       {/* Zubeyr bought counter */}
       {process.env.NEXT_PUBLIC_TURKISH === 'ZUBEYR' && (
-        <div style={{ background: '#1a1a2e', borderBottom: '2px solid #4f8ef7', padding: '10px 20px', textAlign: 'center', fontSize: '15px', fontWeight: 600, color: '#e0e0e0', letterSpacing: '0.5px' }}>
-          📦 Zubeyr Total Bought: <span style={{ color: '#4f8ef7', fontSize: '18px' }}>{zubeyrBoughtCount ?? '...'}</span> books
+        <div style={{ padding: '10px 20px', textAlign: 'center' }}>
+          Total Bought: {zubeyrBoughtCount ?? '...'} books
         </div>
       )}
       {/* Header */}
