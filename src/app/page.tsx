@@ -711,6 +711,8 @@ export default function Home() {
         greatbookprices1: setAllGreatbook,
         betterworldbookswest: setAllBwbWest,
         zuber: setAllZuber,
+        baystatebooks: setAllBaystate,
+        Awesomebooksusa: setAllAwesome,
         bookfinder: setAllBookfinder,
         amazon: setAllAmazon,
         christianbook: setAllChristianbook,
