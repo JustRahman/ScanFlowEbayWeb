@@ -152,6 +152,7 @@ export default function Home() {
   const [allChristianbook, setAllChristianbook] = useState<Book[]>([]);
   const [allEbayNew, setAllEbayNew] = useState<Book[]>([]);
   const [unseenIds, setUnseenIds] = useState<Set<string>>(new Set());
+  const [zubeyrBoughtCount, setZubeyrBoughtCount] = useState<number | null>(null);
 
   // ── Stats counts (lightweight, no full rows) ──
   const [statCounts, setStatCounts] = useState<Record<ActiveSource, { total: number; buy: number; review: number; reject: number; bought: number; today: number }>>({
@@ -465,6 +466,18 @@ export default function Home() {
         setUnseenIds(unseen);
         // Save current IDs as seen for next visit
         localStorage.setItem('scanflow_seen', JSON.stringify(allLoaded));
+      }
+
+      // ── Fetch Zubeyr bought count ──
+      if (process.env.NEXT_PUBLIC_TURKISH === 'ZUBEYR') {
+        try {
+          const res = await fetch(`${SUPABASE_URL}/rest/v1/ebay_books_zubeyr?select=id&decision=eq.BOUGHT`, {
+            headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range-Unit': 'items', 'Range': '0-0' },
+          });
+          const countHeader = res.headers.get('Content-Range');
+          const total = countHeader ? parseInt(countHeader.split('/')[1]) : 0;
+          setZubeyrBoughtCount(total);
+        } catch { /* ignore */ }
       }
 
       setLoading(false);
@@ -956,6 +969,12 @@ export default function Home() {
 
   return (
     <>
+      {/* Zubeyr bought counter */}
+      {process.env.NEXT_PUBLIC_TURKISH === 'ZUBEYR' && (
+        <div style={{ background: '#1a1a2e', borderBottom: '2px solid #4f8ef7', padding: '10px 20px', textAlign: 'center', fontSize: '15px', fontWeight: 600, color: '#e0e0e0', letterSpacing: '0.5px' }}>
+          📦 Zubeyr Total Bought: <span style={{ color: '#4f8ef7', fontSize: '18px' }}>{zubeyrBoughtCount ?? '...'}</span> books
+        </div>
+      )}
       {/* Header */}
       <div className="header">
         <h1>{activeSeller === 'bookfinder' ? 'BooksFinder' : activeSeller === 'amazon' ? 'Amazon' : activeSeller === 'christianbook' ? 'ChristianBook' : activeSeller === 'ebay_new' ? 'eBay New' : (SELLERS.find(s => s.id === activeSeller)?.label ?? activeSeller)} Deals</h1>
