@@ -16,7 +16,7 @@ const HEADERS = {
   'Authorization': `Bearer ${SUPABASE_KEY}`,
 };
 
-type Seller = 'booksrun' | 'oneplanetbooks' | 'thriftbooks.store' | 'betterworldbooks' | 'greenworldbooks' | 'greatbookprices1' | 'betterworldbookswest' | 'zuber' | 'baystatebooks' | 'Awesomebooksusa';
+type Seller = 'booksrun' | 'oneplanetbooks' | 'thriftbooks.store' | 'betterworldbooks' | 'greenworldbooks' | 'greatbookprices1' | 'betterworldbookswest' | 'zuber' | 'baystatebooks' | 'Awesomebooksusa' | 'goodwillswpa';
 type ActiveSource = Seller | 'bookfinder' | 'amazon' | 'christianbook' | 'ebay_new' | 'keepa';
 type DecisionFilter = 'all' | 'BUY' | 'REVIEW' | 'REJECT';
 type PriceFilter = 'all' | '0-5' | '5-10' | '10-20' | '20+';
@@ -80,6 +80,7 @@ const SELLERS: { id: Seller; label: string }[] = [
   { id: 'zuber', label: 'Zuber' },
   { id: 'baystatebooks', label: 'BayState' },
   { id: 'Awesomebooksusa', label: 'AwesomeBooks' },
+  { id: 'goodwillswpa', label: 'GoodWill' },
 ];
 
 function getMarketplace(url: string): string {
@@ -152,6 +153,7 @@ export default function Home() {
   const [allZuber, setAllZuber] = useState<Book[]>([]);
   const [allBaystate, setAllBaystate] = useState<Book[]>([]);
   const [allAwesome, setAllAwesome] = useState<Book[]>([]);
+  const [allGoodwill, setAllGoodwill] = useState<Book[]>([]);
   const [allBookfinder, setAllBookfinder] = useState<Book[]>([]);
   const [allAmazon, setAllAmazon] = useState<Book[]>([]);
   const [allChristianbook, setAllChristianbook] = useState<Book[]>([]);
@@ -172,6 +174,7 @@ export default function Home() {
     zuber: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
     baystatebooks: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
     Awesomebooksusa: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
+    goodwillswpa: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
     bookfinder: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
     amazon: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
     christianbook: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
@@ -395,7 +398,7 @@ export default function Home() {
   const fetchStatCounts = useCallback(async () => {
     try {
       const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      const sellers: Seller[] = ['booksrun', 'oneplanetbooks', 'thriftbooks.store', 'betterworldbooks', 'greenworldbooks', 'greatbookprices1', 'betterworldbookswest', 'zuber', 'baystatebooks', 'Awesomebooksusa'];
+      const sellers: Seller[] = ['booksrun', 'oneplanetbooks', 'thriftbooks.store', 'betterworldbooks', 'greenworldbooks', 'greatbookprices1', 'betterworldbookswest', 'zuber', 'baystatebooks', 'Awesomebooksusa', 'goodwillswpa'];
       const results = await Promise.all(sellers.map(async (seller) => {
         const [totalRes, buyRes, reviewRes, rejectRes, boughtRes, todayRes] = await Promise.all([
           fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=id&seller=eq.${encodeURIComponent(seller)}`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
@@ -484,7 +487,7 @@ export default function Home() {
   useEffect(() => {
     async function loadAll() {
       setLoading(true);
-      const [booksrun, oneplanet, thriftbooks, bwb, greenworld, greatbook, bwbwest, zuber, baystate, awesome, keepaBooks, bookfinder, amazonBooks, cbBooks, ebayNewBooks] = await Promise.all([
+      const [booksrun, oneplanet, thriftbooks, bwb, greenworld, greatbook, bwbwest, zuber, baystate, awesome, goodwill, keepaBooks, bookfinder, amazonBooks, cbBooks, ebayNewBooks] = await Promise.all([
         fetchBooksForSeller('booksrun'),
         fetchBooksForSeller('oneplanetbooks'),
         fetchBooksForSeller('thriftbooks.store'),
@@ -495,6 +498,7 @@ export default function Home() {
         fetchBooksForSeller('zuber'),
         fetchBooksForSeller('baystatebooks'),
         fetchBooksForSeller('Awesomebooksusa'),
+        fetchBooksForSeller('goodwillswpa'),
         fetchKeepaBooks(),
         fetchBookfinderBooks(),
         fetchAmazonBooks(),
@@ -511,6 +515,7 @@ export default function Home() {
       setAllZuber(zuber);
       setAllBaystate(baystate);
       setAllAwesome(awesome);
+      setAllGoodwill(goodwill);
       setAllKeepa(keepaBooks);
       setAllBookfinder(bookfinder);
       setAllAmazon(amazonBooks);
@@ -531,6 +536,7 @@ export default function Home() {
           ...zuber.map(b => `ebay:${b.id}`),
           ...baystate.map(b => `ebay:${b.id}`),
           ...awesome.map(b => `ebay:${b.id}`),
+          ...goodwill.map(b => `ebay:${b.id}`),
           ...bookfinder.map(b => `bf:${b.id}`),
           ...amazonBooks.map(b => `am:${b.id}`),
           ...cbBooks.map(b => `cb:${b.id}`),
@@ -602,6 +608,7 @@ export default function Home() {
           zuber: setAllZuber,
           baystatebooks: setAllBaystate,
           Awesomebooksusa: setAllAwesome,
+          goodwillswpa: setAllGoodwill,
           bookfinder: setAllBookfinder,
           amazon: setAllAmazon,
           christianbook: setAllChristianbook,
@@ -640,6 +647,7 @@ export default function Home() {
       zuber: allZuber,
       baystatebooks: allBaystate,
       Awesomebooksusa: allAwesome,
+      goodwillswpa: allGoodwill,
       bookfinder: allBookfinder,
       amazon: allAmazon,
       christianbook: allChristianbook,
@@ -647,7 +655,7 @@ export default function Home() {
       keepa: allKeepa,
     };
     return map[activeSeller];
-  }, [activeSeller, allBooksrun, allOneplanet, allThriftbooks, allBwb, allGreenworld, allGreatbook, allBwbWest, allZuber, allBaystate, allAwesome, allBookfinder, allAmazon, allChristianbook, allEbayNew, allKeepa]);
+  }, [activeSeller, allBooksrun, allOneplanet, allThriftbooks, allBwb, allGreenworld, allGreatbook, allBwbWest, allZuber, allBaystate, allAwesome, allGoodwill, allBookfinder, allAmazon, allChristianbook, allEbayNew, allKeepa]);
 
   // ── Seller counts (BUY count for each) ──
   const sellerCounts = useMemo(() => ({
@@ -661,6 +669,7 @@ export default function Home() {
     zuber: statCounts.zuber.buy,
     baystatebooks: statCounts.baystatebooks.buy,
     Awesomebooksusa: statCounts.Awesomebooksusa.buy,
+    goodwillswpa: statCounts.goodwillswpa.buy,
     bookfinder: statCounts.bookfinder.buy,
     amazon: statCounts.amazon.buy,
     christianbook: statCounts.christianbook.buy,
@@ -786,6 +795,7 @@ export default function Home() {
         zuber: setAllZuber,
         baystatebooks: setAllBaystate,
         Awesomebooksusa: setAllAwesome,
+        goodwillswpa: setAllGoodwill,
         bookfinder: setAllBookfinder,
         amazon: setAllAmazon,
         christianbook: setAllChristianbook,
@@ -970,7 +980,7 @@ export default function Home() {
                 <a href={book.ebay_url.includes('|') ? `https://www.ebay.com/itm/${numericItemId(book.ebay_item_id)}` : book.ebay_url} target="_blank" rel="noopener noreferrer"
                   className={`platform-btn ${book.seller === 'thriftbooks.store' ? 'thriftbooks' : book.seller === 'oneplanetbooks' ? 'oneplanet' : 'ebay'}`}
                   onClick={() => recordClick(book.id, book.isbn, book.seller, book._source)}>
-                  <span className="platform-name">{{booksrun: 'BR eBay', 'thriftbooks.store': 'ThriftBooks', oneplanetbooks: 'OnePlanet', betterworldbooks: 'BWB', greenworldbooks: 'GreenWorld', greatbookprices1: 'GBP eBay', betterworldbookswest: 'BWB West', zuber: 'Zuber', baystatebooks: 'BayState', Awesomebooksusa: 'AwesomeBooks'}[book.seller] || book.seller}</span>
+                  <span className="platform-name">{{booksrun: 'BR eBay', 'thriftbooks.store': 'ThriftBooks', oneplanetbooks: 'OnePlanet', betterworldbooks: 'BWB', greenworldbooks: 'GreenWorld', greatbookprices1: 'GBP eBay', betterworldbookswest: 'BWB West', zuber: 'Zuber', baystatebooks: 'BayState', Awesomebooksusa: 'AwesomeBooks', goodwillswpa: 'GoodWill'}[book.seller] || book.seller}</span>
                   <span className="platform-price">${buyPrice.toFixed(2)}</span>
                 </a>
                 {hasSiteLink && (
@@ -1095,6 +1105,14 @@ export default function Home() {
                   <span className="count">{sellerCounts[s.id] ?? '-'}</span>
                 </button>
               ))}
+              <button
+                key="ebay_new"
+                className={`source-btn ${activeSeller === 'ebay_new' ? 'active' : ''}`}
+                onClick={() => { setActiveSeller('ebay_new'); setHasanFilter(false); }}
+              >
+                eBay New
+                <span className="count">{sellerCounts.ebay_new ?? '-'}</span>
+              </button>
             </div>
           </div>
           {process.env.NEXT_PUBLIC_TURKISH !== 'ZUBEYR' && (
@@ -1108,14 +1126,6 @@ export default function Home() {
               >
                 BooksFinder
                 <span className="count">{sellerCounts.bookfinder ?? '-'}</span>
-              </button>
-              <button
-                key="ebay_new"
-                className={`source-btn ${activeSeller === 'ebay_new' ? 'active' : ''}`}
-                onClick={() => { setActiveSeller('ebay_new'); setHasanFilter(false); }}
-              >
-                eBay New
-                <span className="count">{sellerCounts.ebay_new ?? '-'}</span>
               </button>
               <button
                 key="christianbook"
