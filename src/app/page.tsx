@@ -188,18 +188,19 @@ export default function Home() {
   // ── Fetch all BUY + REVIEW books for a seller (real-time, no rotation) ──
   const fetchBooksForSeller = useCallback(async (seller: string): Promise<Book[]> => {
     try {
+      const since = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
       const fetches: Promise<Response>[] = [
-        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.BUY`, {
+        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.BUY&scraped_at=gte.${since}&id=gte.17582`, {
           headers: HEADERS
         }),
-        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.REVIEW`, {
+        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.REVIEW&scraped_at=gte.${since}&id=gte.17582`, {
           headers: HEADERS
         }),
       ];
       // For greatbookprices1, also fetch REJECT books
       if (seller === 'greatbookprices1') {
         fetches.push(
-          fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.REJECT`, {
+          fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.REJECT&scraped_at=gte.${since}&id=gte.17582`, {
             headers: HEADERS
           })
         );
@@ -343,17 +344,13 @@ export default function Home() {
     }
   }, []);
 
-  // ── Fetch Keepa books (10 BooksRun + 10 ThriftBooks BUY) ──
+  // ── Fetch Keepa books (Used - Like New BUY only) ──
   const fetchKeepaBooks = useCallback(async (): Promise<Book[]> => {
     try {
-      const [booksrunRes, thriftRes] = await Promise.all([
-        fetch(`${SUPABASE_URL}/rest/v1/${KP_TABLE}?select=*&decision=eq.BUY&buy_box_seller=ilike.*BooksRun*&order=evaluated_at.desc&limit=10`, { headers: HEADERS }),
-        fetch(`${SUPABASE_URL}/rest/v1/${KP_TABLE}?select=*&decision=eq.BUY&buy_box_seller=ilike.*ThriftBooks*&order=evaluated_at.desc&limit=10`, { headers: HEADERS }),
-      ]);
-      const booksrunData = booksrunRes.ok ? await booksrunRes.json() : [];
-      const thriftData = thriftRes.ok ? await thriftRes.json() : [];
+      const likeNewRes = await fetch(`${SUPABASE_URL}/rest/v1/${KP_TABLE}?select=*&decision=eq.BUY&buy_box_condition=eq.Used%20-%20Like%20New&order=new_180_avg.desc&limit=50`, { headers: HEADERS });
+      const likeNewData = likeNewRes.ok ? await likeNewRes.json() : [];
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return [...booksrunData, ...thriftData].map((b: any, i: number) => ({
+      return likeNewData.map((b: any, i: number) => ({
         id: 950000 + i,
         isbn: b.asin,
         title: `[${b.buy_box_seller?.split(' (')[0] ?? 'Keepa'}] ${b.asin}`,
