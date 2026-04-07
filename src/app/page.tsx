@@ -12,14 +12,7 @@ const CB_TABLE = 'christianbook_books';
 const EN_TABLE = 'ebay_books_new';
 const KP_TABLE = 'keepa_books';
 
-const PROMOTED_IDS: Record<string, number[]> = {
-  booksrun: [17286,17290,17293,17385,17636,17637,17639,17640,17642,17647,17648,17651,17652,17653,17655,17657,17658],
-  'thriftbooks.store': [17383,17389,17412,17663,17667],
-  betterworldbooks: [17246,17255,17263,17271,17272,17273,17276,17284,17321],
-  betterworldbookswest: [17234,17245,17258,17267,17275,17283,17591],
-  greenworldbooks: [17194,17244,17302,17364,17396],
-  baystatebooks: [17463,17464,17465,17473,17476,17479,17480,17483,17487,17491,17495,17497,17498,17499,17503,17512,17518,17519,17525,17527,17536,17541,17544,17546,17547,17549,17551,17552,17553,17554,17557,17558,17560,17562,17563,17566,17567,17568,17570,17573,17578],
-};
+
 const HEADERS = {
   'apikey': SUPABASE_KEY,
   'Authorization': `Bearer ${SUPABASE_KEY}`,
@@ -197,23 +190,18 @@ export default function Home() {
   // ── Fetch all BUY + REVIEW books for a seller (real-time, no rotation) ──
   const fetchBooksForSeller = useCallback(async (seller: string): Promise<Book[]> => {
     try {
-      const promotedIds = PROMOTED_IDS[seller];
-      if (promotedIds) {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=id.desc&id=in.(${promotedIds.join(',')})`, { headers: HEADERS });
-        return res.ok ? await res.json() : [];
-      }
       const fetches: Promise<Response>[] = [
-        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.BUY`, {
+        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.BUY&id=gte.17673`, {
           headers: HEADERS
         }),
-        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.REVIEW`, {
+        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.REVIEW&id=gte.17673`, {
           headers: HEADERS
         }),
       ];
       // For greatbookprices1, also fetch REJECT books
       if (seller === 'greatbookprices1') {
         fetches.push(
-          fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.REJECT`, {
+          fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.REJECT&id=gte.17673`, {
             headers: HEADERS
           })
         );
