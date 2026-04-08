@@ -190,18 +190,19 @@ export default function Home() {
   // ── Fetch all BUY + REVIEW books for a seller (real-time, no rotation) ──
   const fetchBooksForSeller = useCallback(async (seller: string): Promise<Book[]> => {
     try {
+      const idFilter = process.env.NEXT_PUBLIC_TURKISH === 'HASAN' ? '&id=gte.18658' : '';
       const fetches: Promise<Response>[] = [
-        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.BUY&id=gte.18658`, {
+        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.BUY${idFilter}`, {
           headers: HEADERS
         }),
-        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.REVIEW&id=gte.18658`, {
+        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.REVIEW${idFilter}`, {
           headers: HEADERS
         }),
       ];
       // For greatbookprices1, also fetch REJECT books
       if (seller === 'greatbookprices1') {
         fetches.push(
-          fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.REJECT&id=gte.18658`, {
+          fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.REJECT${idFilter}`, {
             headers: HEADERS
           })
         );
