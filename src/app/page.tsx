@@ -1299,7 +1299,7 @@ export default function Home() {
           <div className="filter-section">
             <div className="filter-title">Decision</div>
             <div className="filter-options">
-              {(['all', 'BUY', 'REJECT'] as DecisionFilter[]).map(d => (
+              {(process.env.NEXT_PUBLIC_TURKISH === 'ZUBEYR' ? ['all', 'BUY', 'REVIEW', 'REJECT'] as DecisionFilter[] : ['all', 'BUY', 'REJECT'] as DecisionFilter[]).map(d => (
                 <div
                   key={d}
                   className={`filter-toggle ${decisionFilter === d ? 'active' : ''}`}
