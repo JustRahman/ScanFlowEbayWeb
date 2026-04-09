@@ -141,6 +141,7 @@ export default function Home() {
   const [weightFilter, setWeightFilter] = useState<WeightFilter>('all');
   const [minProfit, setMinProfit] = useState('');
   const [minRoi, setMinRoi] = useState('');
+  const [roiSort, setRoiSort] = useState<'desc' | 'asc' | ''>('');
   const [hasanFilter, setHasanFilter] = useState(true);
   const [cheapOpen, setCheapOpen] = useState(true);
   const [expensiveOpen, setExpensiveOpen] = useState(true);
@@ -737,12 +738,12 @@ export default function Home() {
         if (!isNaN(v) && (book.fbm_profit == null || book.fbm_profit / 100 < v)) return false;
       }
 
-      // ROI range (e.g. 7 means 7.0x-7.9x)
+      // Min ROI filter (e.g. 5 means 5x+)
       if (minRoi) {
         const val = parseFloat(minRoi.replace(/x$/i, ''));
         if (!isNaN(val)) {
           const roi = book.amazon_price && book.price > 0 ? book.amazon_price / book.price : 0;
-          if (roi < val || roi >= val + 1) return false;
+          if (roi < val) return false;
         }
       }
 
@@ -757,8 +758,16 @@ export default function Home() {
     });
   }, [allBooks, decisionFilter, searchQuery, priceFilters, formatFilter, weightFilter, minProfit, minRoi, hasanFilter]);
 
-  const cheapBooks = useMemo(() => filteredBooks.filter(b => b.price / 100 < 20), [filteredBooks]);
-  const expensiveBooks = useMemo(() => filteredBooks.filter(b => b.price / 100 >= 20), [filteredBooks]);
+  const sortedBooks = useMemo(() => {
+    if (!roiSort) return filteredBooks;
+    return [...filteredBooks].sort((a, b) => {
+      const roiA = a.amazon_price && a.price > 0 ? a.amazon_price / a.price : 0;
+      const roiB = b.amazon_price && b.price > 0 ? b.amazon_price / b.price : 0;
+      return roiSort === 'desc' ? roiB - roiA : roiA - roiB;
+    });
+  }, [filteredBooks, roiSort]);
+  const cheapBooks = useMemo(() => sortedBooks.filter(b => b.price / 100 < 20), [sortedBooks]);
+  const expensiveBooks = useMemo(() => sortedBooks.filter(b => b.price / 100 >= 20), [sortedBooks]);
 
   // ── Action handler (direct PATCH to Supabase) ──
   async function handleAction(bookId: number, action: 'BOUGHT' | 'REJECT', buttonElement: HTMLButtonElement) {
@@ -1375,11 +1384,11 @@ export default function Home() {
           </div>
 
           <div className="filter-section">
-            <div className="filter-title">ROI Range</div>
+            <div className="filter-title">Min ROI</div>
             <input
               type="text"
               className="search-box"
-              placeholder="e.g. 7 for 7.0x-7.9x"
+              placeholder="e.g. 5 for 5x+"
               value={minRoi}
               onChange={e => setMinRoi(e.target.value)}
             />
@@ -1388,8 +1397,22 @@ export default function Home() {
 
         {/* Content */}
         <div className="content">
-          <div className="results-count">
-            {loading ? '' : `Showing ${filteredBooks.length} book${filteredBooks.length !== 1 ? 's' : ''}`}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
+            <div className="results-count" style={{ margin: 0 }}>
+              {loading ? '' : `Showing ${filteredBooks.length} book${filteredBooks.length !== 1 ? 's' : ''}`}
+            </div>
+            <button
+              onClick={() => setRoiSort(s => s === 'desc' ? '' : 'desc')}
+              style={{ background: roiSort === 'desc' ? '#1f6feb' : '#30363d', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 14px', fontSize: 13, cursor: 'pointer' }}
+            >
+              ROI ↓ Highest
+            </button>
+            <button
+              onClick={() => setRoiSort(s => s === 'asc' ? '' : 'asc')}
+              style={{ background: roiSort === 'asc' ? '#1f6feb' : '#30363d', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 14px', fontSize: 13, cursor: 'pointer' }}
+            >
+              ROI ↑ Lowest
+            </button>
           </div>
 
           {loading ? (
