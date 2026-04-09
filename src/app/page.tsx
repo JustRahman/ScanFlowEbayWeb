@@ -74,7 +74,6 @@ const SELLERS: { id: Seller; label: string }[] = [
   { id: 'booksrun', label: 'BooksRun' },
   { id: 'oneplanetbooks', label: 'OnePlanetBooks' },
   { id: 'thriftbooks.store', label: 'ThriftBooks' },
-
   { id: 'betterworldbooks', label: 'BWB' },
   { id: 'greenworldbooks', label: 'GreenWorld' },
   { id: 'greatbookprices1', label: 'GreatBookPrices' },
@@ -85,6 +84,8 @@ const SELLERS: { id: Seller; label: string }[] = [
   { id: 'goodwillswpa', label: 'GoodWill SWPA' },
   { id: 'goodwillbks', label: 'GoodWill BKS' },
 ];
+const SELLERS_MAIN: Seller[] = ['booksrun', 'thriftbooks.store', 'betterworldbooks', 'betterworldbookswest', 'greenworldbooks', 'baystatebooks'];
+const SELLERS_OTHER_EBAY: Seller[] = ['zuber', 'oneplanetbooks', 'greatbookprices1', 'Awesomebooksusa', 'goodwillswpa', 'goodwillbks'];
 
 function getMarketplace(url: string): string {
   if (url.includes('ebay.com')) return 'eBay';
@@ -1102,25 +1103,25 @@ export default function Home() {
 
         <div className="source-toggle-container">
           <div className="source-toggle-group">
-            <div className="source-toggle-label">eBay Sellers</div>
+            <div className="source-toggle-label">Main Sellers</div>
             <div className="source-toggle">
-              {SELLERS.map(s => (
-                <button
-                  key={s.id}
-                  className={`source-btn ${activeSeller === s.id ? 'active' : ''}`}
-                  onClick={() => { setActiveSeller(s.id); setHasanFilter(true); }}
-                >
-                  {s.label}
-                  <span className="count">{sellerCounts[s.id] ?? '-'}</span>
+              {SELLERS_MAIN.map(id => { const s = SELLERS.find(x => x.id === id)!; return (
+                <button key={s.id} className={`source-btn ${activeSeller === s.id ? 'active' : ''}`} onClick={() => { setActiveSeller(s.id); setHasanFilter(true); }}>
+                  {s.label}<span className="count">{sellerCounts[s.id] ?? '-'}</span>
                 </button>
-              ))}
-              <button
-                key="ebay_new"
-                className={`source-btn ${activeSeller === 'ebay_new' ? 'active' : ''}`}
-                onClick={() => { setActiveSeller('ebay_new'); setHasanFilter(false); }}
-              >
-                eBay New
-                <span className="count">{sellerCounts.ebay_new ?? '-'}</span>
+              ); })}
+            </div>
+          </div>
+          <div className="source-toggle-group">
+            <div className="source-toggle-label">Other eBay</div>
+            <div className="source-toggle">
+              {SELLERS_OTHER_EBAY.map(id => { const s = SELLERS.find(x => x.id === id)!; return (
+                <button key={s.id} className={`source-btn ${activeSeller === s.id ? 'active' : ''}`} onClick={() => { setActiveSeller(s.id); setHasanFilter(true); }}>
+                  {s.label}<span className="count">{sellerCounts[s.id] ?? '-'}</span>
+                </button>
+              ); })}
+              <button className={`source-btn ${activeSeller === 'ebay_new' ? 'active' : ''}`} onClick={() => { setActiveSeller('ebay_new'); setHasanFilter(false); }}>
+                eBay New<span className="count">{sellerCounts.ebay_new ?? '-'}</span>
               </button>
             </div>
           </div>
@@ -1128,29 +1129,14 @@ export default function Home() {
           <div className="source-toggle-group">
             <div className="source-toggle-label">Other Sources</div>
             <div className="source-toggle">
-              <button
-                key="bookfinder"
-                className={`source-btn ${activeSeller === 'bookfinder' ? 'active' : ''}`}
-                onClick={() => { setActiveSeller('bookfinder'); setHasanFilter(true); }}
-              >
-                BooksFinder
-                <span className="count">{sellerCounts.bookfinder ?? '-'}</span>
+              <button className={`source-btn ${activeSeller === 'bookfinder' ? 'active' : ''}`} onClick={() => { setActiveSeller('bookfinder'); setHasanFilter(true); }}>
+                BooksFinder<span className="count">{sellerCounts.bookfinder ?? '-'}</span>
               </button>
-              <button
-                key="christianbook"
-                className={`source-btn ${activeSeller === 'christianbook' ? 'active' : ''}`}
-                onClick={() => { setActiveSeller('christianbook'); setHasanFilter(false); }}
-              >
-                ChristianBook
-                <span className="count">{sellerCounts.christianbook ?? '-'}</span>
+              <button className={`source-btn ${activeSeller === 'christianbook' ? 'active' : ''}`} onClick={() => { setActiveSeller('christianbook'); setHasanFilter(false); }}>
+                ChristianBook<span className="count">{sellerCounts.christianbook ?? '-'}</span>
               </button>
-              <button
-                key="keepa"
-                className={`source-btn ${activeSeller === 'keepa' ? 'active' : ''}`}
-                onClick={() => { setActiveSeller('keepa'); setHasanFilter(false); }}
-              >
-                Keepa
-                <span className="count">{sellerCounts.keepa ?? '-'}</span>
+              <button className={`source-btn ${activeSeller === 'keepa' ? 'active' : ''}`} onClick={() => { setActiveSeller('keepa'); setHasanFilter(false); }}>
+                Keepa<span className="count">{sellerCounts.keepa ?? '-'}</span>
               </button>
             </div>
           </div>
