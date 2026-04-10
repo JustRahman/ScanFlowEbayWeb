@@ -1417,6 +1417,13 @@ export default function Home() {
             >
               ROI ↑ Lowest
             </button>
+            <input
+              type="text"
+              placeholder="Min ROI (e.g. 5)"
+              value={minRoi}
+              onChange={e => setMinRoi(e.target.value)}
+              style={{ background: '#1c2333', color: '#e1e4e8', border: '1px solid #30363d', borderRadius: 6, padding: '6px 10px', fontSize: 13, width: 130 }}
+            />
           </div>
 
           {loading ? (
