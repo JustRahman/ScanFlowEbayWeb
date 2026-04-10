@@ -914,6 +914,9 @@ export default function Home() {
             <span className="badge badge-condition">{book.condition || 'Used'}</span>
             <span className="badge badge-seller">{book.seller}</span>
           </div>
+          {book.isbn && (
+            <div style={{ fontSize: '0.75rem', color: '#8b949e', marginTop: '0.25rem' }}>ISBN: {book.isbn}</div>
+          )}
 
           <div className="price-card">
             <div className="price-row">
