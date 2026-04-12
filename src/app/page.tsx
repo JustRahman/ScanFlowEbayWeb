@@ -192,7 +192,7 @@ export default function Home() {
   // ── Fetch all BUY + REVIEW books for a seller (real-time, no rotation) ──
   const fetchBooksForSeller = useCallback(async (seller: string): Promise<Book[]> => {
     try {
-      const idFilter = process.env.NEXT_PUBLIC_TURKISH === 'HASAN' ? '&id=gte.153009'
+      const idFilter = process.env.NEXT_PUBLIC_TURKISH === 'HASAN' ? '&id=gte.157952'
         : process.env.NEXT_PUBLIC_TURKISH === 'ZUBEYR' ? '&id=gte.150180' : '';
       const fetches: Promise<Response>[] = [
         fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.BUY${idFilter}`, {
