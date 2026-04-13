@@ -825,6 +825,7 @@ export default function Home() {
         Awesomebooksusa: setAllAwesome,
         goodwillswpa: setAllGoodwill,
         goodwillbks: setAllGoodwillBks,
+        'sensational-buys': setAllSensational,
         bookfinder: setAllBookfinder,
         amazon: setAllAmazon,
         christianbook: setAllChristianbook,
