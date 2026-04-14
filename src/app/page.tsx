@@ -131,6 +131,9 @@ export default function Home() {
   const clickedIsbns = useRef<Set<string>>(new Set());
   const lastClickedBook = useRef<{ id: number; isbn: string; seller: string; _source?: string } | null>(null);
   const [buyModalBook, setBuyModalBook] = useState<{ id: number; isbn: string; seller: string; _source?: string } | null>(null);
+  const [priceHistoryAsin, setPriceHistoryAsin] = useState<string | null>(null);
+  const [priceHistoryData, setPriceHistoryData] = useState<{ recorded_at: string; amazon_price_cents: number | null; new_price_cents: number | null }[]>([]);
+  const [priceHistoryLoading, setPriceHistoryLoading] = useState(false);
   const [buyQuantity, setBuyQuantity] = useState('1');
   const [notifySent, setNotifySent] = useState(false);
 
@@ -865,6 +868,15 @@ export default function Home() {
     return date > twentyFourHoursAgo;
   };
 
+  const openPriceHistory = async (asin: string) => {
+    setPriceHistoryAsin(asin);
+    setPriceHistoryLoading(true);
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/keepa_price_history?asin=eq.${asin}&order=recorded_at.asc`, { headers: HEADERS });
+    const data = res.ok ? await res.json() : [];
+    setPriceHistoryData(data);
+    setPriceHistoryLoading(false);
+  };
+
   const recordClick = (bookId: number, isbn: string, seller: string, source?: string) => {
     lastClickedBook.current = { id: bookId, isbn, seller, _source: source };
     const key = source === 'bookfinder' ? `bf:${isbn}` : `${isbn}:${seller}`;
@@ -927,7 +939,11 @@ export default function Home() {
             <span className="badge badge-seller">{book.seller}</span>
           </div>
           {book.isbn && (
-            <div style={{ fontSize: '0.75rem', color: '#8b949e', marginTop: '0.25rem' }}>ISBN: {book.isbn}</div>
+            <div
+              style={{ fontSize: '0.75rem', color: '#8b949e', marginTop: '0.25rem', cursor: book.asin ? 'pointer' : 'default' }}
+              onDoubleClick={() => book.asin && openPriceHistory(book.asin)}
+              title={book.asin ? 'Double-click to view price history' : undefined}
+            >ISBN: {book.isbn}</div>
           )}
 
           <div className="price-card">
@@ -1482,6 +1498,64 @@ export default function Home() {
         </div>
       </div>
 
+      {priceHistoryAsin && (() => {
+        const W = 560, H = 220, PAD = 40;
+        const points = priceHistoryData.filter(d => d.new_price_cents || d.amazon_price_cents);
+        const allVals = points.flatMap(d => [d.new_price_cents, d.amazon_price_cents].filter((v): v is number => v != null));
+        const minV = Math.min(...allVals), maxV = Math.max(...allVals);
+        const xScale = (i: number) => PAD + (i / Math.max(points.length - 1, 1)) * (W - PAD * 2);
+        const yScale = (v: number) => PAD + (1 - (v - minV) / Math.max(maxV - minV, 1)) * (H - PAD * 2);
+        const pathFor = (key: 'new_price_cents' | 'amazon_price_cents', color: string) => {
+          const pts = points.map((d, i) => d[key] != null ? `${xScale(i)},${yScale(d[key]!)}` : null).filter(Boolean);
+          if (pts.length < 2) return null;
+          return <polyline key={key} points={pts.join(' ')} fill="none" stroke={color} strokeWidth="2" />;
+        };
+        return (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            onClick={() => setPriceHistoryAsin(null)}>
+            <div style={{ background: '#1e2130', borderRadius: '1rem', padding: '1.5rem 2rem', minWidth: '620px', boxShadow: '0 24px 48px rgba(0,0,0,0.4)' }}
+              onClick={e => e.stopPropagation()}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                <div style={{ color: '#fff', fontWeight: 700, fontSize: '1rem' }}>Price History — {priceHistoryAsin}</div>
+                <button onClick={() => setPriceHistoryAsin(null)} style={{ background: 'none', border: 'none', color: '#aaa', fontSize: '1.4rem', cursor: 'pointer' }}>×</button>
+              </div>
+              {priceHistoryLoading ? (
+                <div style={{ color: '#aaa', textAlign: 'center', padding: '2rem' }}>Loading...</div>
+              ) : points.length === 0 ? (
+                <div style={{ color: '#aaa', textAlign: 'center', padding: '2rem' }}>No price history found.</div>
+              ) : (
+                <>
+                  <svg width={W} height={H} style={{ display: 'block', margin: '0 auto' }}>
+                    {/* Grid lines */}
+                    {[0, 0.25, 0.5, 0.75, 1].map(t => {
+                      const y = PAD + t * (H - PAD * 2);
+                      const val = maxV - t * (maxV - minV);
+                      return <g key={t}>
+                        <line x1={PAD} y1={y} x2={W - PAD} y2={y} stroke="#333" strokeWidth="1" />
+                        <text x={PAD - 4} y={y + 4} textAnchor="end" fill="#888" fontSize="10">${(val / 100).toFixed(0)}</text>
+                      </g>;
+                    })}
+                    {pathFor('new_price_cents', '#4fc3f7')}
+                    {pathFor('amazon_price_cents', '#81c784')}
+                    {/* Dots */}
+                    {points.map((d, i) => <>
+                      {d.new_price_cents != null && <circle key={`n${i}`} cx={xScale(i)} cy={yScale(d.new_price_cents)} r="3" fill="#4fc3f7" />}
+                      {d.amazon_price_cents != null && <circle key={`a${i}`} cx={xScale(i)} cy={yScale(d.amazon_price_cents)} r="3" fill="#81c784" />}
+                    </>)}
+                  </svg>
+                  <div style={{ display: 'flex', gap: '1.5rem', justifyContent: 'center', marginTop: '0.75rem' }}>
+                    <span style={{ color: '#4fc3f7', fontSize: '0.85rem' }}>● New Price</span>
+                    <span style={{ color: '#81c784', fontSize: '0.85rem' }}>● Amazon Price</span>
+                  </div>
+                  <div style={{ color: '#666', fontSize: '0.75rem', textAlign: 'center', marginTop: '0.5rem' }}>
+                    {points.length} data points · {new Date(points[0].recorded_at).toLocaleDateString()} – {new Date(points[points.length - 1].recorded_at).toLocaleDateString()}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        );
+      })()}
     </>
   );
 }
