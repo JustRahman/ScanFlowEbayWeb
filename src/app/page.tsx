@@ -1507,15 +1507,10 @@ export default function Home() {
         const range = Math.max(maxV - minV, 1);
         const xScale = (i: number) => PAD + (i / Math.max(points.length - 1, 1)) * (W - PAD * 2);
         const yScale = (v: number) => PAD + (1 - (v - minV) / range) * (H - PAD * 2);
-        const smoothPath = (key: 'new_price_cents' | 'amazon_price_cents') => {
-          const pts = points.map((d, i) => d[key] != null ? { x: xScale(i), y: yScale(d[key]!) } : null).filter((p): p is {x:number,y:number} => p != null);
+        const linePath = (key: 'new_price_cents' | 'amazon_price_cents') => {
+          const pts = points.map((d, i) => d[key] != null ? `${xScale(i)},${yScale(d[key]!)}` : null).filter(Boolean);
           if (pts.length < 2) return null;
-          let d = `M ${pts[0].x} ${pts[0].y}`;
-          for (let i = 1; i < pts.length; i++) {
-            const cp1x = (pts[i-1].x + pts[i].x) / 2;
-            d += ` C ${cp1x} ${pts[i-1].y}, ${cp1x} ${pts[i].y}, ${pts[i].x} ${pts[i].y}`;
-          }
-          return d;
+          return pts.join(' ');
         };
         const hoverPoint = hoverIdx != null ? points[hoverIdx] : null;
         const hoverX = hoverIdx != null ? xScale(hoverIdx) : null;
@@ -1551,12 +1546,15 @@ export default function Home() {
                         <text x={PAD - 6} y={y + 4} textAnchor="end" fill="#666" fontSize="11">${(val / 100).toFixed(0)}</text>
                       </g>;
                     })}
-                    {/* Smooth lines */}
+                    {/* Lines + dots */}
                     {(['new_price_cents', 'amazon_price_cents'] as const).map((key, ki) => {
-                      const d = smoothPath(key);
-                      if (!d) return null;
+                      const pts = linePath(key);
+                      if (!pts) return null;
                       const color = ki === 0 ? '#4fc3f7' : '#81c784';
-                      return <path key={key} d={d} fill="none" stroke={color} strokeWidth="2.5" strokeLinejoin="round" />;
+                      return <g key={key}>
+                        <polyline points={pts} fill="none" stroke={color} strokeWidth="2" />
+                        {points.map((d, i) => d[key] != null ? <circle key={i} cx={xScale(i)} cy={yScale(d[key]!)} r="3" fill={color} /> : null)}
+                      </g>;
                     })}
                     {/* Hover line + dots */}
                     {hoverX != null && hoverPoint && <>
