@@ -11,6 +11,7 @@ const AM_TABLE = 'amazon_books';
 const CB_TABLE = 'christianbook_books';
 const EN_TABLE = 'ebay_books_new';
 const KP_TABLE = 'keepa_books';
+const NS_TABLE = 'namesearch_books';
 
 
 const HEADERS = {
@@ -19,7 +20,7 @@ const HEADERS = {
 };
 
 type Seller = 'booksrun' | 'oneplanetbooks' | 'thrift.books' | 'betterworldbooks' | 'greenworldbooks' | 'greatbookprices1' | 'betterworldbookswest' | 'zuber' | 'baystatebooks' | 'Awesomebooksusa' | 'goodwillswpa' | 'goodwillbks' | 'sensational-buys';
-type ActiveSource = Seller | 'bookfinder' | 'amazon' | 'christianbook' | 'ebay_new' | 'keepa';
+type ActiveSource = Seller | 'bookfinder' | 'amazon' | 'christianbook' | 'ebay_new' | 'keepa' | 'namesearch';
 type DecisionFilter = 'all' | 'BUY' | 'REVIEW' | 'REJECT';
 type PriceFilter = 'all' | '0-5' | '5-10' | '10-20' | '20+';
 type FormatFilter = 'all' | 'Paperback' | 'Hardcover';
@@ -66,7 +67,7 @@ interface Book {
   edition?: string;
   pounds?: number;
   source_scraped_at?: string;
-  _source?: 'ebay' | 'bookfinder' | 'amazon' | 'christianbook' | 'ebay_new' | 'keepa';
+  _source?: 'ebay' | 'bookfinder' | 'amazon' | 'christianbook' | 'ebay_new' | 'keepa' | 'namesearch';
   source_url?: string;
 }
 
@@ -171,6 +172,7 @@ export default function Home() {
   const [allChristianbook, setAllChristianbook] = useState<Book[]>([]);
   const [allEbayNew, setAllEbayNew] = useState<Book[]>([]);
   const [allKeepa, setAllKeepa] = useState<Book[]>([]);
+  const [allNamesearch, setAllNamesearch] = useState<Book[]>([]);
   const [unseenIds, setUnseenIds] = useState<Set<string>>(new Set());
   const [zubeyrBoughtCount, setZubeyrBoughtCount] = useState<number | null>(null);
 
@@ -194,6 +196,7 @@ export default function Home() {
     christianbook: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
     ebay_new: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
     keepa: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
+    namesearch: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
   });
 
   // ── Fetch all BUY + REVIEW books for a seller (real-time, no rotation) ──
@@ -408,6 +411,26 @@ export default function Home() {
     }
   }, []);
 
+  // ── Fetch NameSearch books (namesearch_books table, prices in cents) ──
+  const fetchNamesearchBooks = useCallback(async (): Promise<Book[]> => {
+    try {
+      const [buyRes, reviewRes] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/${NS_TABLE}?select=*&order=scraped_at.desc,id.desc&decision=eq.BUY`, { headers: HEADERS }),
+        fetch(`${SUPABASE_URL}/rest/v1/${NS_TABLE}?select=*&order=scraped_at.desc,id.desc&decision=eq.REVIEW`, { headers: HEADERS }),
+      ]);
+      const buy = buyRes.ok ? await buyRes.json() : [];
+      const review = reviewRes.ok ? await reviewRes.json() : [];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return [...buy, ...review].map((b: any) => ({
+        ...b,
+        _source: 'namesearch' as const,
+      }));
+    } catch (error) {
+      console.error('Error fetching namesearch:', error);
+      return [];
+    }
+  }, []);
+
   // ── Fetch stat counts per seller (single lightweight query) ──
   const fetchStatCounts = useCallback(async () => {
     try {
@@ -491,6 +514,18 @@ export default function Home() {
       counts.keepa = {
         total: bfParseCount(kpTotalRes), buy: bfParseCount(kpBuyRes), review: 0, reject: 0, bought: 0, today: 0,
       };
+      // Fetch namesearch stats
+      const [nsTotalRes, nsBuyRes, nsReviewRes, nsRejectRes, nsBoughtRes] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/${NS_TABLE}?select=id`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${SUPABASE_URL}/rest/v1/${NS_TABLE}?select=id&decision=eq.BUY`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${SUPABASE_URL}/rest/v1/${NS_TABLE}?select=id&decision=eq.REVIEW`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${SUPABASE_URL}/rest/v1/${NS_TABLE}?select=id&decision=eq.REJECT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${SUPABASE_URL}/rest/v1/${NS_TABLE}?select=id&decision=eq.BOUGHT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+      ]);
+      counts.namesearch = {
+        total: bfParseCount(nsTotalRes), buy: bfParseCount(nsBuyRes), review: bfParseCount(nsReviewRes),
+        reject: bfParseCount(nsRejectRes), bought: bfParseCount(nsBoughtRes), today: 0,
+      };
       setStatCounts(counts);
     } catch (error) {
       console.error('Error fetching stat counts:', error);
@@ -501,7 +536,7 @@ export default function Home() {
   useEffect(() => {
     async function loadAll() {
       setLoading(true);
-      const [booksrun, oneplanet, thriftbooks, bwb, greenworld, greatbook, bwbwest, zuber, baystate, awesome, goodwill, goodwillbks, sensational, keepaBooks, bookfinder, amazonBooks, cbBooks, ebayNewBooks] = await Promise.all([
+      const [booksrun, oneplanet, thriftbooks, bwb, greenworld, greatbook, bwbwest, zuber, baystate, awesome, goodwill, goodwillbks, sensational, keepaBooks, bookfinder, amazonBooks, cbBooks, ebayNewBooks, namesearchBooks] = await Promise.all([
         fetchBooksForSeller('booksrun'),
         fetchBooksForSeller('oneplanetbooks'),
         fetchBooksForSeller('thrift.books'),
@@ -520,6 +555,7 @@ export default function Home() {
         fetchAmazonBooks(),
         fetchChristianbookBooks(),
         fetchEbayNewBooks(),
+        fetchNamesearchBooks(),
       ]);
       setAllBooksrun(booksrun);
       setAllOneplanet(oneplanet);
@@ -539,6 +575,7 @@ export default function Home() {
       setAllAmazon(amazonBooks);
       setAllChristianbook(cbBooks);
       setAllEbayNew(ebayNewBooks);
+      setAllNamesearch(namesearchBooks);
 
       // ── Track unseen books via localStorage (client only, ghost skips) ──
       const ghostMode = sessionStorage.getItem('scanflow_ghost') === '1';
@@ -561,6 +598,7 @@ export default function Home() {
           ...amazonBooks.map(b => `am:${b.id}`),
           ...cbBooks.map(b => `cb:${b.id}`),
           ...ebayNewBooks.map(b => `en:${b.id}`),
+          ...namesearchBooks.map(b => `ns:${b.id}`),
         ];
         const stored = localStorage.getItem('scanflow_seen');
         const seenSet = stored ? new Set<string>(JSON.parse(stored)) : new Set<string>();
@@ -589,7 +627,7 @@ export default function Home() {
     }
     loadAll();
     fetchStatCounts();
-  }, [fetchBooksForSeller, fetchBookfinderBooks, fetchAmazonBooks, fetchChristianbookBooks, fetchEbayNewBooks, fetchKeepaBooks, fetchStatCounts]);
+  }, [fetchBooksForSeller, fetchBookfinderBooks, fetchAmazonBooks, fetchChristianbookBooks, fetchEbayNewBooks, fetchKeepaBooks, fetchNamesearchBooks, fetchStatCounts]);
 
   // ── "Did you buy?" modal on tab return ──
   useEffect(() => {
@@ -607,7 +645,7 @@ export default function Home() {
   const handleBuyConfirm = async () => {
     if (!buyModalBook) return;
     try {
-      const table = buyModalBook._source === 'keepa' ? KP_TABLE : buyModalBook._source === 'bookfinder' ? BF_TABLE : buyModalBook._source === 'amazon' ? AM_TABLE : buyModalBook._source === 'christianbook' ? CB_TABLE : TABLE;
+      const table = buyModalBook._source === 'keepa' ? KP_TABLE : buyModalBook._source === 'bookfinder' ? BF_TABLE : buyModalBook._source === 'amazon' ? AM_TABLE : buyModalBook._source === 'christianbook' ? CB_TABLE : buyModalBook._source === 'namesearch' ? NS_TABLE : TABLE;
       const patchKey = buyModalBook._source === 'keepa' ? `asin=eq.${buyModalBook.isbn}` : `id=eq.${buyModalBook.id}`;
       const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${patchKey}`, {
         method: 'PATCH',
@@ -636,8 +674,9 @@ export default function Home() {
           christianbook: setAllChristianbook,
           ebay_new: setAllEbayNew,
           keepa: setAllKeepa,
+          namesearch: setAllNamesearch,
         };
-        const source: ActiveSource = buyModalBook._source === 'keepa' ? 'keepa' : buyModalBook._source === 'bookfinder' ? 'bookfinder' : buyModalBook._source === 'amazon' ? 'amazon' : buyModalBook._source === 'christianbook' ? 'christianbook' : buyModalBook._source === 'ebay_new' ? 'ebay_new' : (buyModalBook.seller as Seller);
+        const source: ActiveSource = buyModalBook._source === 'keepa' ? 'keepa' : buyModalBook._source === 'bookfinder' ? 'bookfinder' : buyModalBook._source === 'amazon' ? 'amazon' : buyModalBook._source === 'christianbook' ? 'christianbook' : buyModalBook._source === 'ebay_new' ? 'ebay_new' : buyModalBook._source === 'namesearch' ? 'namesearch' : (buyModalBook.seller as Seller);
         if (setterMap[source]) setterMap[source](removeBook);
         setStatCounts(prev => ({
           ...prev,
@@ -677,9 +716,10 @@ export default function Home() {
       christianbook: allChristianbook,
       ebay_new: allEbayNew,
       keepa: allKeepa,
+      namesearch: allNamesearch,
     };
     return map[activeSeller];
-  }, [activeSeller, allBooksrun, allOneplanet, allThriftbooks, allBwb, allGreenworld, allGreatbook, allBwbWest, allZuber, allBaystate, allAwesome, allGoodwill, allGoodwillBks, allSensational, allBookfinder, allAmazon, allChristianbook, allEbayNew, allKeepa]);
+  }, [activeSeller, allBooksrun, allOneplanet, allThriftbooks, allBwb, allGreenworld, allGreatbook, allBwbWest, allZuber, allBaystate, allAwesome, allGoodwill, allGoodwillBks, allSensational, allBookfinder, allAmazon, allChristianbook, allEbayNew, allKeepa, allNamesearch]);
 
   // ── Seller counts (BUY count for each) ──
   const sellerCounts = useMemo(() => ({
@@ -701,6 +741,7 @@ export default function Home() {
     christianbook: statCounts.christianbook.buy,
     ebay_new: statCounts.ebay_new.buy,
     keepa: statCounts.keepa.buy,
+    namesearch: statCounts.namesearch.buy,
   }), [statCounts]);
 
   // ── Stats (from count queries, not full rows) ──
@@ -800,7 +841,7 @@ export default function Home() {
         updateData.bought_at = new Date().toISOString();
       }
 
-      const table = activeSeller === 'keepa' ? KP_TABLE : activeSeller === 'bookfinder' ? BF_TABLE : activeSeller === 'amazon' ? AM_TABLE : activeSeller === 'christianbook' ? CB_TABLE : TABLE;
+      const table = activeSeller === 'keepa' ? KP_TABLE : activeSeller === 'bookfinder' ? BF_TABLE : activeSeller === 'amazon' ? AM_TABLE : activeSeller === 'christianbook' ? CB_TABLE : activeSeller === 'namesearch' ? NS_TABLE : TABLE;
       const keepaBook = activeSeller === 'keepa' ? allKeepa.find(b => b.id === bookId) : null;
       const patchKey = activeSeller === 'keepa' ? `asin=eq.${keepaBook?.isbn}` : `id=eq.${bookId}`;
       const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${patchKey}`, {
@@ -837,6 +878,7 @@ export default function Home() {
         christianbook: setAllChristianbook,
         ebay_new: setAllEbayNew,
         keepa: setAllKeepa,
+        namesearch: setAllNamesearch,
       };
       setterMap[activeSeller](removeBook);
     } catch (error) {
@@ -911,7 +953,7 @@ export default function Home() {
     const soldPerMonth = book.sales_rank_drops_90 != null ? Math.round(book.sales_rank_drops_90 / 3) : null;
     const weightLbs = book.weight_oz ? (book.weight_oz / 16).toFixed(1) : null;
     const bookIsNew = isNewBook(book);
-    const sourcePrefix = book._source === 'bookfinder' ? 'bf' : book._source === 'amazon' ? 'am' : book._source === 'christianbook' ? 'cb' : book._source === 'ebay_new' ? 'en' : book._source === 'keepa' ? 'kp' : 'ebay';
+    const sourcePrefix = book._source === 'bookfinder' ? 'bf' : book._source === 'amazon' ? 'am' : book._source === 'christianbook' ? 'cb' : book._source === 'ebay_new' ? 'en' : book._source === 'keepa' ? 'kp' : book._source === 'namesearch' ? 'ns' : 'ebay';
     const isUnseen = unseenIds.has(`${sourcePrefix}:${book.id}`);
 
     return (
@@ -1140,8 +1182,8 @@ export default function Home() {
       )}
       {/* Header */}
       <div className="header">
-        <h1>{activeSeller === 'bookfinder' ? 'BooksFinder' : activeSeller === 'amazon' ? 'Amazon' : activeSeller === 'christianbook' ? 'ChristianBook' : activeSeller === 'ebay_new' ? 'eBay New' : activeSeller === 'keepa' ? 'Keepa' : (SELLERS.find(s => s.id === activeSeller)?.label ?? activeSeller)} Deals</h1>
-        <p>{activeSeller === 'bookfinder' ? 'Books from BooksFinder' : activeSeller === 'amazon' ? 'Books from Amazon' : activeSeller === 'christianbook' ? 'Books from ChristianBook.com' : activeSeller === 'ebay_new' ? 'New books from eBay' : activeSeller === 'keepa' ? 'Top BUY books from Keepa' : `Books from ${SELLERS.find(s => s.id === activeSeller)?.label ?? activeSeller} on eBay`}</p>
+        <h1>{activeSeller === 'bookfinder' ? 'BooksFinder' : activeSeller === 'amazon' ? 'Amazon' : activeSeller === 'christianbook' ? 'ChristianBook' : activeSeller === 'ebay_new' ? 'eBay New' : activeSeller === 'keepa' ? 'Keepa' : activeSeller === 'namesearch' ? 'NameSearch' : (SELLERS.find(s => s.id === activeSeller)?.label ?? activeSeller)} Deals</h1>
+        <p>{activeSeller === 'bookfinder' ? 'Books from BooksFinder' : activeSeller === 'amazon' ? 'Books from Amazon' : activeSeller === 'christianbook' ? 'Books from ChristianBook.com' : activeSeller === 'ebay_new' ? 'New books from eBay' : activeSeller === 'keepa' ? 'Top BUY books from Keepa' : activeSeller === 'namesearch' ? 'Books from NameSearch' : `Books from ${SELLERS.find(s => s.id === activeSeller)?.label ?? activeSeller} on eBay`}</p>
 
         <div className="source-toggle-container">
           <div className="source-toggle-group">
@@ -1180,6 +1222,9 @@ export default function Home() {
               <button className={`source-btn ${activeSeller === 'keepa' ? 'active' : ''}`} onClick={() => { setActiveSeller('keepa'); setHasanFilter(false); }}>
                 Keepa<span className="count">{sellerCounts.keepa ?? '-'}</span>
               </button>
+              <button className={`source-btn ${activeSeller === 'namesearch' ? 'active' : ''}`} onClick={() => { setActiveSeller('namesearch'); setHasanFilter(false); }}>
+                NameSearch<span className="count">{sellerCounts.namesearch ?? '-'}</span>
+              </button>
             </div>
           </div>
           )}
@@ -1208,7 +1253,7 @@ export default function Home() {
           disabled={notifySent}
           onClick={async () => {
             setNotifySent(true);
-            const seller = activeSeller === 'bookfinder' ? 'BooksFinder' : activeSeller === 'amazon' ? 'Amazon' : activeSeller === 'christianbook' ? 'ChristianBook' : activeSeller === 'ebay_new' ? 'eBay New' : activeSeller === 'keepa' ? 'Keepa' : (SELLERS.find(s => s.id === activeSeller)?.label ?? activeSeller);
+            const seller = activeSeller === 'bookfinder' ? 'BooksFinder' : activeSeller === 'amazon' ? 'Amazon' : activeSeller === 'christianbook' ? 'ChristianBook' : activeSeller === 'ebay_new' ? 'eBay New' : activeSeller === 'keepa' ? 'Keepa' : activeSeller === 'namesearch' ? 'NameSearch' : (SELLERS.find(s => s.id === activeSeller)?.label ?? activeSeller);
             await fetch('/api/notify', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
