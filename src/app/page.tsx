@@ -424,7 +424,7 @@ export default function Home() {
     try {
       const isHasan = process.env.NEXT_PUBLIC_TURKISH === 'HASAN';
       const url = isHasan
-        ? `${SUPABASE_URL}/rest/v1/${MINI_TABLE}?select=*&order=scraped_at.desc,id.desc&priject=eq.namesearch`
+        ? `${SUPABASE_URL}/rest/v1/${MINI_TABLE}?select=*&order=scraped_at.desc,id.desc&project=eq.namesearch`
         : `${SUPABASE_URL}/rest/v1/${NS_TABLE}?select=*&order=scraped_at.desc,id.desc`;
       const [buyRes, reviewRes] = await Promise.all([
         fetch(`${url}&decision=eq.BUY`, { headers: HEADERS }),
@@ -460,12 +460,12 @@ export default function Home() {
     }
   }, []);
 
-  // ── Fetch Medicine books (minibooks table, priject=medicine) ──
+  // ── Fetch Medicine books (minibooks table, project=medicine) ──
   const fetchMedicineBooks = useCallback(async (): Promise<Book[]> => {
     try {
       const [buyRes, reviewRes] = await Promise.all([
-        fetch(`${SUPABASE_URL}/rest/v1/${MINI_TABLE}?select=*&order=scraped_at.desc,id.desc&priject=eq.medicine&decision=eq.BUY`, { headers: HEADERS }),
-        fetch(`${SUPABASE_URL}/rest/v1/${MINI_TABLE}?select=*&order=scraped_at.desc,id.desc&priject=eq.medicine&decision=eq.REVIEW`, { headers: HEADERS }),
+        fetch(`${SUPABASE_URL}/rest/v1/${MINI_TABLE}?select=*&order=scraped_at.desc,id.desc&project=eq.medicine&decision=eq.BUY`, { headers: HEADERS }),
+        fetch(`${SUPABASE_URL}/rest/v1/${MINI_TABLE}?select=*&order=scraped_at.desc,id.desc&project=eq.medicine&decision=eq.REVIEW`, { headers: HEADERS }),
       ]);
       const buy = buyRes.ok ? await buyRes.json() : [];
       const review = reviewRes.ok ? await reviewRes.json() : [];
@@ -562,7 +562,7 @@ export default function Home() {
       };
       // Fetch namesearch stats
       const nsBase = process.env.NEXT_PUBLIC_TURKISH === 'HASAN'
-        ? `${SUPABASE_URL}/rest/v1/${MINI_TABLE}?select=id&priject=eq.namesearch`
+        ? `${SUPABASE_URL}/rest/v1/${MINI_TABLE}?select=id&project=eq.namesearch`
         : `${SUPABASE_URL}/rest/v1/${NS_TABLE}?select=id`;
       const [nsTotalRes, nsBuyRes, nsReviewRes, nsRejectRes, nsBoughtRes] = await Promise.all([
         fetch(nsBase, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
@@ -587,8 +587,8 @@ export default function Home() {
         total: bfParseCount(zmTotalRes), buy: bfParseCount(zmBuyRes), review: bfParseCount(zmReviewRes),
         reject: bfParseCount(zmRejectRes), bought: bfParseCount(zmBoughtRes), today: 0,
       };
-      // Fetch medicine stats (minibooks, priject=medicine)
-      const medBase = `${SUPABASE_URL}/rest/v1/${MINI_TABLE}?select=id&priject=eq.medicine`;
+      // Fetch medicine stats (minibooks, project=medicine)
+      const medBase = `${SUPABASE_URL}/rest/v1/${MINI_TABLE}?select=id&project=eq.medicine`;
       const [medTotalRes, medBuyRes, medReviewRes, medRejectRes, medBoughtRes] = await Promise.all([
         fetch(medBase, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
         fetch(`${medBase}&decision=eq.BUY`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
