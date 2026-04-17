@@ -175,6 +175,7 @@ export default function Home() {
   const [allNamesearch, setAllNamesearch] = useState<Book[]>([]);
   const [unseenIds, setUnseenIds] = useState<Set<string>>(new Set());
   const [zubeyrBoughtCount, setZubeyrBoughtCount] = useState<number | null>(null);
+  const [zubeyrTotalBoughtCount, setZubeyrTotalBoughtCount] = useState<number | null>(null);
 
   // ── Stats counts (lightweight, no full rows) ──
   const [statCounts, setStatCounts] = useState<Record<ActiveSource, { total: number; buy: number; review: number; reject: number; bought: number; today: number }>>({
@@ -614,12 +615,20 @@ export default function Home() {
       // ── Fetch Zubeyr bought count ──
       if (process.env.NEXT_PUBLIC_TURKISH === 'ZUBEYR') {
         try {
-          const res = await fetch(`${SUPABASE_URL}/rest/v1/ebay_books_zubeyr?select=id&decision=eq.BOUGHT`, {
-            headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range-Unit': 'items', 'Range': '0-0' },
-          });
-          const countHeader = res.headers.get('Content-Range');
-          const total = countHeader ? parseInt(countHeader.split('/')[1]) : 0;
-          setZubeyrBoughtCount(total);
+          const [recentRes, totalRes] = await Promise.all([
+            fetch(`${SUPABASE_URL}/rest/v1/ebay_books_zubeyr?select=id&decision=eq.BOUGHT`, {
+              headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range-Unit': 'items', 'Range': '0-0' },
+            }),
+            fetch(`${SUPABASE_URL}/rest/v1/ebay_books_zubeyr_bought?select=id`, {
+              headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range-Unit': 'items', 'Range': '0-0' },
+            }),
+          ]);
+          const parseCount = (res: Response) => {
+            const h = res.headers.get('Content-Range');
+            return h ? parseInt(h.split('/')[1]) || 0 : 0;
+          };
+          setZubeyrBoughtCount(parseCount(recentRes));
+          setZubeyrTotalBoughtCount(parseCount(totalRes));
         } catch { /* ignore */ }
       }
 
@@ -1176,8 +1185,9 @@ export default function Home() {
     <>
       {/* Zubeyr bought counter */}
       {process.env.NEXT_PUBLIC_TURKISH === 'ZUBEYR' && (
-        <div style={{ padding: '10px 20px', textAlign: 'center' }}>
-          Total Bought: {zubeyrBoughtCount ?? '...'} books
+        <div style={{ padding: '10px 20px', textAlign: 'center', display: 'flex', gap: '2rem', justifyContent: 'center' }}>
+          <span>Total Bought: {zubeyrTotalBoughtCount ?? '...'} books</span>
+          <span>Recent Bought: {zubeyrBoughtCount ?? '...'} books</span>
         </div>
       )}
       {/* Header */}
