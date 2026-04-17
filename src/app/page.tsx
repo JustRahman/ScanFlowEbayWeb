@@ -1288,7 +1288,7 @@ export default function Home() {
             <div className="source-toggle">
               {SELLERS_MAIN.map(id => { const s = SELLERS.find(x => x.id === id)!; return (
                 <button key={s.id} className={`source-btn ${activeSeller === s.id ? 'active' : ''}`} onClick={() => { setActiveSeller(s.id); setHasanFilter(true); }}>
-                  {s.label}<span className="count">{sellerCounts[s.id] ?? '-'}</span>
+                  {s.label}
                 </button>
               ); })}
             </div>
@@ -1298,15 +1298,15 @@ export default function Home() {
             <div className="source-toggle">
               {SELLERS_OTHER_EBAY.map(id => { const s = SELLERS.find(x => x.id === id)!; return (
                 <button key={s.id} className={`source-btn ${activeSeller === s.id ? 'active' : ''}`} onClick={() => { setActiveSeller(s.id); setHasanFilter(true); }}>
-                  {s.label}<span className="count">{sellerCounts[s.id] ?? '-'}</span>
+                  {s.label}
                 </button>
               ); })}
               <button className={`source-btn ${activeSeller === 'ebay_new' ? 'active' : ''}`} onClick={() => { setActiveSeller('ebay_new'); setHasanFilter(false); }}>
-                eBay New<span className="count">{sellerCounts.ebay_new ?? '-'}</span>
+                eBay New
               </button>
               {process.env.NEXT_PUBLIC_TURKISH === 'ZUBEYR' && (
                 <button className={`source-btn ${activeSeller === 'zoombookscompany' ? 'active' : ''}`} onClick={() => { setActiveSeller('zoombookscompany'); setHasanFilter(false); }}>
-                  ZoomBooks<span className="count">{sellerCounts.zoombookscompany ?? '-'}</span>
+                  ZoomBooks
                 </button>
               )}
             </div>
@@ -1316,20 +1316,20 @@ export default function Home() {
             <div className="source-toggle-label">Other Sources</div>
             <div className="source-toggle">
               <button className={`source-btn ${activeSeller === 'bookfinder' ? 'active' : ''}`} onClick={() => { setActiveSeller('bookfinder'); setHasanFilter(true); }}>
-                BooksFinder<span className="count">{sellerCounts.bookfinder ?? '-'}</span>
+                BooksFinder
               </button>
               <button className={`source-btn ${activeSeller === 'christianbook' ? 'active' : ''}`} onClick={() => { setActiveSeller('christianbook'); setHasanFilter(false); }}>
-                ChristianBook<span className="count">{sellerCounts.christianbook ?? '-'}</span>
+                ChristianBook
               </button>
               <button className={`source-btn ${activeSeller === 'keepa' ? 'active' : ''}`} onClick={() => { setActiveSeller('keepa'); setHasanFilter(false); }}>
-                Keepa<span className="count">{sellerCounts.keepa ?? '-'}</span>
+                Keepa
               </button>
               <button className={`source-btn ${activeSeller === 'namesearch' ? 'active' : ''}`} onClick={() => { setActiveSeller('namesearch'); setHasanFilter(false); }}>
-                NameSearch<span className="count">{sellerCounts.namesearch ?? '-'}</span>
+                NameSearch
               </button>
               {process.env.NEXT_PUBLIC_TURKISH === 'HASAN' && (
                 <button className={`source-btn ${activeSeller === 'medicine' ? 'active' : ''}`} onClick={() => { setActiveSeller('medicine'); setHasanFilter(false); }}>
-                  Medicine<span className="count">{sellerCounts.medicine ?? '-'}</span>
+                  Medicine
                 </button>
               )}
             </div>
@@ -1583,7 +1583,7 @@ export default function Home() {
         {/* Content */}
         <div className="content">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
-            <div className="results-count" style={{ margin: 0 }}>
+            <div className="results-count" style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700 }}>
               {loading ? '' : `Showing ${filteredBooks.length} book${filteredBooks.length !== 1 ? 's' : ''}`}
             </div>
             <button
