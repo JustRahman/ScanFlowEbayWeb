@@ -1583,7 +1583,7 @@ export default function Home() {
         {/* Content */}
         <div className="content">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
-            <div className="results-count" style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700 }}>
+            <div className="results-count" style={{ margin: '0 auto', fontSize: '1.4rem', fontWeight: 700, color: '#00b894', textAlign: 'center' }}>
               {loading ? '' : `Showing ${filteredBooks.length} book${filteredBooks.length !== 1 ? 's' : ''}`}
             </div>
             <button
