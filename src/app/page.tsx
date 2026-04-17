@@ -12,6 +12,8 @@ const CB_TABLE = 'christianbook_books';
 const EN_TABLE = 'ebay_books_new';
 const KP_TABLE = 'keepa_books';
 const NS_TABLE = 'namesearch_books';
+const ZM_TABLE = 'ebay_books';
+const MINI_TABLE = 'minibooks';
 
 
 const HEADERS = {
@@ -19,8 +21,8 @@ const HEADERS = {
   'Authorization': `Bearer ${SUPABASE_KEY}`,
 };
 
-type Seller = 'booksrun' | 'oneplanetbooks' | 'thrift.books' | 'betterworldbooks' | 'greenworldbooks' | 'greatbookprices1' | 'betterworldbookswest' | 'zuber' | 'baystatebooks' | 'Awesomebooksusa' | 'goodwillswpa' | 'goodwillbks' | 'sensational-buys';
-type ActiveSource = Seller | 'bookfinder' | 'amazon' | 'christianbook' | 'ebay_new' | 'keepa' | 'namesearch';
+type Seller = 'booksrun' | 'oneplanetbooks' | 'thrift.books' | 'betterworldbooks' | 'greenworldbooks' | 'greatbookprices1' | 'betterworldbookswest' | 'zuber' | 'baystatebooks' | 'Awesomebooksusa' | 'goodwillswpa' | 'goodwillbks' | 'sensational-buys' | 'zoombookscompany';
+type ActiveSource = Seller | 'bookfinder' | 'amazon' | 'christianbook' | 'ebay_new' | 'keepa' | 'namesearch' | 'medicine';
 type DecisionFilter = 'all' | 'BUY' | 'REVIEW' | 'REJECT';
 type PriceFilter = 'all' | '0-5' | '5-10' | '10-20' | '20+';
 type FormatFilter = 'all' | 'Paperback' | 'Hardcover';
@@ -67,7 +69,7 @@ interface Book {
   edition?: string;
   pounds?: number;
   source_scraped_at?: string;
-  _source?: 'ebay' | 'bookfinder' | 'amazon' | 'christianbook' | 'ebay_new' | 'keepa' | 'namesearch';
+  _source?: 'ebay' | 'bookfinder' | 'amazon' | 'christianbook' | 'ebay_new' | 'keepa' | 'namesearch' | 'zoombookscompany' | 'medicine';
   source_url?: string;
 }
 
@@ -85,6 +87,7 @@ const SELLERS: { id: Seller; label: string }[] = [
   { id: 'goodwillswpa', label: 'GoodWill SWPA' },
   { id: 'goodwillbks', label: 'GoodWill BKS' },
   { id: 'sensational-buys', label: 'Sensational Buys' },
+  { id: 'zoombookscompany', label: 'ZoomBooks' },
 ];
 const SELLERS_MAIN: Seller[] = ['booksrun', 'thrift.books', 'betterworldbooks', 'betterworldbookswest', 'greenworldbooks', 'baystatebooks'];
 const SELLERS_OTHER_EBAY: Seller[] = ['zuber', 'oneplanetbooks', 'greatbookprices1', 'Awesomebooksusa', 'goodwillswpa', 'goodwillbks', 'sensational-buys'];
@@ -173,6 +176,8 @@ export default function Home() {
   const [allEbayNew, setAllEbayNew] = useState<Book[]>([]);
   const [allKeepa, setAllKeepa] = useState<Book[]>([]);
   const [allNamesearch, setAllNamesearch] = useState<Book[]>([]);
+  const [allZoombooks, setAllZoombooks] = useState<Book[]>([]);
+  const [allMedicine, setAllMedicine] = useState<Book[]>([]);
   const [unseenIds, setUnseenIds] = useState<Set<string>>(new Set());
   const [zubeyrBoughtCount, setZubeyrBoughtCount] = useState<number | null>(null);
   const [zubeyrTotalBoughtCount, setZubeyrTotalBoughtCount] = useState<number | null>(null);
@@ -198,6 +203,8 @@ export default function Home() {
     ebay_new: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
     keepa: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
     namesearch: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
+    zoombookscompany: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
+    medicine: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
   });
 
   // ── Fetch all BUY + REVIEW books for a seller (real-time, no rotation) ──
@@ -412,12 +419,16 @@ export default function Home() {
     }
   }, []);
 
-  // ── Fetch NameSearch books (namesearch_books table, prices in cents) ──
+  // ── Fetch NameSearch books ──
   const fetchNamesearchBooks = useCallback(async (): Promise<Book[]> => {
     try {
+      const isHasan = process.env.NEXT_PUBLIC_TURKISH === 'HASAN';
+      const url = isHasan
+        ? `${SUPABASE_URL}/rest/v1/${MINI_TABLE}?select=*&order=scraped_at.desc,id.desc&priject=eq.namesearch`
+        : `${SUPABASE_URL}/rest/v1/${NS_TABLE}?select=*&order=scraped_at.desc,id.desc`;
       const [buyRes, reviewRes] = await Promise.all([
-        fetch(`${SUPABASE_URL}/rest/v1/${NS_TABLE}?select=*&order=scraped_at.desc,id.desc&decision=eq.BUY`, { headers: HEADERS }),
-        fetch(`${SUPABASE_URL}/rest/v1/${NS_TABLE}?select=*&order=scraped_at.desc,id.desc&decision=eq.REVIEW`, { headers: HEADERS }),
+        fetch(`${url}&decision=eq.BUY`, { headers: HEADERS }),
+        fetch(`${url}&decision=eq.REVIEW`, { headers: HEADERS }),
       ]);
       const buy = buyRes.ok ? await buyRes.json() : [];
       const review = reviewRes.ok ? await reviewRes.json() : [];
@@ -428,6 +439,40 @@ export default function Home() {
       }));
     } catch (error) {
       console.error('Error fetching namesearch:', error);
+      return [];
+    }
+  }, []);
+
+  // ── Fetch ZoomBooks (always from ebay_books) ──
+  const fetchZoombooksBooks = useCallback(async (): Promise<Book[]> => {
+    try {
+      const [buyRes, reviewRes] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/${ZM_TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.zoombookscompany&decision=eq.BUY`, { headers: HEADERS }),
+        fetch(`${SUPABASE_URL}/rest/v1/${ZM_TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.zoombookscompany&decision=eq.REVIEW`, { headers: HEADERS }),
+      ]);
+      const buy = buyRes.ok ? await buyRes.json() : [];
+      const review = reviewRes.ok ? await reviewRes.json() : [];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return [...buy, ...review].map((b: any) => ({ ...b, _source: 'zoombookscompany' as const }));
+    } catch (error) {
+      console.error('Error fetching zoombookscompany:', error);
+      return [];
+    }
+  }, []);
+
+  // ── Fetch Medicine books (minibooks table, priject=medicine) ──
+  const fetchMedicineBooks = useCallback(async (): Promise<Book[]> => {
+    try {
+      const [buyRes, reviewRes] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/${MINI_TABLE}?select=*&order=scraped_at.desc,id.desc&priject=eq.medicine&decision=eq.BUY`, { headers: HEADERS }),
+        fetch(`${SUPABASE_URL}/rest/v1/${MINI_TABLE}?select=*&order=scraped_at.desc,id.desc&priject=eq.medicine&decision=eq.REVIEW`, { headers: HEADERS }),
+      ]);
+      const buy = buyRes.ok ? await buyRes.json() : [];
+      const review = reviewRes.ok ? await reviewRes.json() : [];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return [...buy, ...review].map((b: any) => ({ ...b, _source: 'medicine' as const }));
+    } catch (error) {
+      console.error('Error fetching medicine:', error);
       return [];
     }
   }, []);
@@ -516,16 +561,44 @@ export default function Home() {
         total: bfParseCount(kpTotalRes), buy: bfParseCount(kpBuyRes), review: 0, reject: 0, bought: 0, today: 0,
       };
       // Fetch namesearch stats
+      const nsBase = process.env.NEXT_PUBLIC_TURKISH === 'HASAN'
+        ? `${SUPABASE_URL}/rest/v1/${MINI_TABLE}?select=id&priject=eq.namesearch`
+        : `${SUPABASE_URL}/rest/v1/${NS_TABLE}?select=id`;
       const [nsTotalRes, nsBuyRes, nsReviewRes, nsRejectRes, nsBoughtRes] = await Promise.all([
-        fetch(`${SUPABASE_URL}/rest/v1/${NS_TABLE}?select=id`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
-        fetch(`${SUPABASE_URL}/rest/v1/${NS_TABLE}?select=id&decision=eq.BUY`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
-        fetch(`${SUPABASE_URL}/rest/v1/${NS_TABLE}?select=id&decision=eq.REVIEW`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
-        fetch(`${SUPABASE_URL}/rest/v1/${NS_TABLE}?select=id&decision=eq.REJECT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
-        fetch(`${SUPABASE_URL}/rest/v1/${NS_TABLE}?select=id&decision=eq.BOUGHT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(nsBase, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${nsBase}&decision=eq.BUY`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${nsBase}&decision=eq.REVIEW`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${nsBase}&decision=eq.REJECT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${nsBase}&decision=eq.BOUGHT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
       ]);
       counts.namesearch = {
         total: bfParseCount(nsTotalRes), buy: bfParseCount(nsBuyRes), review: bfParseCount(nsReviewRes),
         reject: bfParseCount(nsRejectRes), bought: bfParseCount(nsBoughtRes), today: 0,
+      };
+      // Fetch zoombookscompany stats (always from ebay_books)
+      const [zmTotalRes, zmBuyRes, zmReviewRes, zmRejectRes, zmBoughtRes] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/${ZM_TABLE}?select=id&seller=eq.zoombookscompany`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${SUPABASE_URL}/rest/v1/${ZM_TABLE}?select=id&seller=eq.zoombookscompany&decision=eq.BUY`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${SUPABASE_URL}/rest/v1/${ZM_TABLE}?select=id&seller=eq.zoombookscompany&decision=eq.REVIEW`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${SUPABASE_URL}/rest/v1/${ZM_TABLE}?select=id&seller=eq.zoombookscompany&decision=eq.REJECT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${SUPABASE_URL}/rest/v1/${ZM_TABLE}?select=id&seller=eq.zoombookscompany&decision=eq.BOUGHT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+      ]);
+      counts.zoombookscompany = {
+        total: bfParseCount(zmTotalRes), buy: bfParseCount(zmBuyRes), review: bfParseCount(zmReviewRes),
+        reject: bfParseCount(zmRejectRes), bought: bfParseCount(zmBoughtRes), today: 0,
+      };
+      // Fetch medicine stats (minibooks, priject=medicine)
+      const medBase = `${SUPABASE_URL}/rest/v1/${MINI_TABLE}?select=id&priject=eq.medicine`;
+      const [medTotalRes, medBuyRes, medReviewRes, medRejectRes, medBoughtRes] = await Promise.all([
+        fetch(medBase, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${medBase}&decision=eq.BUY`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${medBase}&decision=eq.REVIEW`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${medBase}&decision=eq.REJECT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${medBase}&decision=eq.BOUGHT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+      ]);
+      counts.medicine = {
+        total: bfParseCount(medTotalRes), buy: bfParseCount(medBuyRes), review: bfParseCount(medReviewRes),
+        reject: bfParseCount(medRejectRes), bought: bfParseCount(medBoughtRes), today: 0,
       };
       setStatCounts(counts);
     } catch (error) {
@@ -537,7 +610,7 @@ export default function Home() {
   useEffect(() => {
     async function loadAll() {
       setLoading(true);
-      const [booksrun, oneplanet, thriftbooks, bwb, greenworld, greatbook, bwbwest, zuber, baystate, awesome, goodwill, goodwillbks, sensational, keepaBooks, bookfinder, amazonBooks, cbBooks, ebayNewBooks, namesearchBooks] = await Promise.all([
+      const [booksrun, oneplanet, thriftbooks, bwb, greenworld, greatbook, bwbwest, zuber, baystate, awesome, goodwill, goodwillbks, sensational, keepaBooks, bookfinder, amazonBooks, cbBooks, ebayNewBooks, namesearchBooks, zoombooksBooks, medicineBooks] = await Promise.all([
         fetchBooksForSeller('booksrun'),
         fetchBooksForSeller('oneplanetbooks'),
         fetchBooksForSeller('thrift.books'),
@@ -557,6 +630,8 @@ export default function Home() {
         fetchChristianbookBooks(),
         fetchEbayNewBooks(),
         fetchNamesearchBooks(),
+        fetchZoombooksBooks(),
+        fetchMedicineBooks(),
       ]);
       setAllBooksrun(booksrun);
       setAllOneplanet(oneplanet);
@@ -577,6 +652,8 @@ export default function Home() {
       setAllChristianbook(cbBooks);
       setAllEbayNew(ebayNewBooks);
       setAllNamesearch(namesearchBooks);
+      setAllZoombooks(zoombooksBooks);
+      setAllMedicine(medicineBooks);
 
       // ── Track unseen books via localStorage (client only, ghost skips) ──
       const ghostMode = sessionStorage.getItem('scanflow_ghost') === '1';
@@ -600,6 +677,8 @@ export default function Home() {
           ...cbBooks.map(b => `cb:${b.id}`),
           ...ebayNewBooks.map(b => `en:${b.id}`),
           ...namesearchBooks.map(b => `ns:${b.id}`),
+          ...zoombooksBooks.map(b => `zm:${b.id}`),
+          ...medicineBooks.map(b => `med:${b.id}`),
         ];
         const stored = localStorage.getItem('scanflow_seen');
         const seenSet = stored ? new Set<string>(JSON.parse(stored)) : new Set<string>();
@@ -654,7 +733,7 @@ export default function Home() {
   const handleBuyConfirm = async () => {
     if (!buyModalBook) return;
     try {
-      const table = buyModalBook._source === 'keepa' ? KP_TABLE : buyModalBook._source === 'bookfinder' ? BF_TABLE : buyModalBook._source === 'amazon' ? AM_TABLE : buyModalBook._source === 'christianbook' ? CB_TABLE : buyModalBook._source === 'namesearch' ? NS_TABLE : TABLE;
+      const table = buyModalBook._source === 'keepa' ? KP_TABLE : buyModalBook._source === 'bookfinder' ? BF_TABLE : buyModalBook._source === 'amazon' ? AM_TABLE : buyModalBook._source === 'christianbook' ? CB_TABLE : buyModalBook._source === 'namesearch' ? (process.env.NEXT_PUBLIC_TURKISH === 'HASAN' ? MINI_TABLE : NS_TABLE) : buyModalBook._source === 'medicine' ? MINI_TABLE : buyModalBook._source === 'zoombookscompany' ? ZM_TABLE : TABLE;
       const patchKey = buyModalBook._source === 'keepa' ? `asin=eq.${buyModalBook.isbn}` : `id=eq.${buyModalBook.id}`;
       const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${patchKey}`, {
         method: 'PATCH',
@@ -684,8 +763,10 @@ export default function Home() {
           ebay_new: setAllEbayNew,
           keepa: setAllKeepa,
           namesearch: setAllNamesearch,
+          zoombookscompany: setAllZoombooks,
+          medicine: setAllMedicine,
         };
-        const source: ActiveSource = buyModalBook._source === 'keepa' ? 'keepa' : buyModalBook._source === 'bookfinder' ? 'bookfinder' : buyModalBook._source === 'amazon' ? 'amazon' : buyModalBook._source === 'christianbook' ? 'christianbook' : buyModalBook._source === 'ebay_new' ? 'ebay_new' : buyModalBook._source === 'namesearch' ? 'namesearch' : (buyModalBook.seller as Seller);
+        const source: ActiveSource = buyModalBook._source === 'keepa' ? 'keepa' : buyModalBook._source === 'bookfinder' ? 'bookfinder' : buyModalBook._source === 'amazon' ? 'amazon' : buyModalBook._source === 'christianbook' ? 'christianbook' : buyModalBook._source === 'ebay_new' ? 'ebay_new' : buyModalBook._source === 'namesearch' ? 'namesearch' : buyModalBook._source === 'medicine' ? 'medicine' : buyModalBook._source === 'zoombookscompany' ? 'zoombookscompany' : (buyModalBook.seller as Seller);
         if (setterMap[source]) setterMap[source](removeBook);
         setStatCounts(prev => ({
           ...prev,
@@ -726,9 +807,11 @@ export default function Home() {
       ebay_new: allEbayNew,
       keepa: allKeepa,
       namesearch: allNamesearch,
+      zoombookscompany: allZoombooks,
+      medicine: allMedicine,
     };
     return map[activeSeller];
-  }, [activeSeller, allBooksrun, allOneplanet, allThriftbooks, allBwb, allGreenworld, allGreatbook, allBwbWest, allZuber, allBaystate, allAwesome, allGoodwill, allGoodwillBks, allSensational, allBookfinder, allAmazon, allChristianbook, allEbayNew, allKeepa, allNamesearch]);
+  }, [activeSeller, allBooksrun, allOneplanet, allThriftbooks, allBwb, allGreenworld, allGreatbook, allBwbWest, allZuber, allBaystate, allAwesome, allGoodwill, allGoodwillBks, allSensational, allBookfinder, allAmazon, allChristianbook, allEbayNew, allKeepa, allNamesearch, allZoombooks, allMedicine]);
 
   // ── Seller counts (BUY count for each) ──
   const sellerCounts = useMemo(() => ({
@@ -751,6 +834,8 @@ export default function Home() {
     ebay_new: statCounts.ebay_new.buy,
     keepa: statCounts.keepa.buy,
     namesearch: statCounts.namesearch.buy,
+    zoombookscompany: statCounts.zoombookscompany.buy,
+    medicine: statCounts.medicine.buy,
   }), [statCounts]);
 
   // ── Stats (from count queries, not full rows) ──
@@ -888,6 +973,8 @@ export default function Home() {
         ebay_new: setAllEbayNew,
         keepa: setAllKeepa,
         namesearch: setAllNamesearch,
+        zoombookscompany: setAllZoombooks,
+        medicine: setAllMedicine,
       };
       setterMap[activeSeller](removeBook);
     } catch (error) {
@@ -1192,8 +1279,8 @@ export default function Home() {
       )}
       {/* Header */}
       <div className="header">
-        <h1>{activeSeller === 'bookfinder' ? 'BooksFinder' : activeSeller === 'amazon' ? 'Amazon' : activeSeller === 'christianbook' ? 'ChristianBook' : activeSeller === 'ebay_new' ? 'eBay New' : activeSeller === 'keepa' ? 'Keepa' : activeSeller === 'namesearch' ? 'NameSearch' : (SELLERS.find(s => s.id === activeSeller)?.label ?? activeSeller)} Deals</h1>
-        <p>{activeSeller === 'bookfinder' ? 'Books from BooksFinder' : activeSeller === 'amazon' ? 'Books from Amazon' : activeSeller === 'christianbook' ? 'Books from ChristianBook.com' : activeSeller === 'ebay_new' ? 'New books from eBay' : activeSeller === 'keepa' ? 'Top BUY books from Keepa' : activeSeller === 'namesearch' ? 'Books from NameSearch' : `Books from ${SELLERS.find(s => s.id === activeSeller)?.label ?? activeSeller} on eBay`}</p>
+        <h1>{activeSeller === 'bookfinder' ? 'BooksFinder' : activeSeller === 'amazon' ? 'Amazon' : activeSeller === 'christianbook' ? 'ChristianBook' : activeSeller === 'ebay_new' ? 'eBay New' : activeSeller === 'keepa' ? 'Keepa' : activeSeller === 'namesearch' ? 'NameSearch' : activeSeller === 'medicine' ? 'Medicine' : (SELLERS.find(s => s.id === activeSeller)?.label ?? activeSeller)} Deals</h1>
+        <p>{activeSeller === 'bookfinder' ? 'Books from BooksFinder' : activeSeller === 'amazon' ? 'Books from Amazon' : activeSeller === 'christianbook' ? 'Books from ChristianBook.com' : activeSeller === 'ebay_new' ? 'New books from eBay' : activeSeller === 'keepa' ? 'Top BUY books from Keepa' : activeSeller === 'namesearch' ? 'Books from NameSearch' : activeSeller === 'medicine' ? 'Medicine books' : `Books from ${SELLERS.find(s => s.id === activeSeller)?.label ?? activeSeller} on eBay`}</p>
 
         <div className="source-toggle-container">
           <div className="source-toggle-group">
@@ -1217,6 +1304,11 @@ export default function Home() {
               <button className={`source-btn ${activeSeller === 'ebay_new' ? 'active' : ''}`} onClick={() => { setActiveSeller('ebay_new'); setHasanFilter(false); }}>
                 eBay New<span className="count">{sellerCounts.ebay_new ?? '-'}</span>
               </button>
+              {process.env.NEXT_PUBLIC_TURKISH === 'ZUBEYR' && (
+                <button className={`source-btn ${activeSeller === 'zoombookscompany' ? 'active' : ''}`} onClick={() => { setActiveSeller('zoombookscompany'); setHasanFilter(false); }}>
+                  ZoomBooks<span className="count">{sellerCounts.zoombookscompany ?? '-'}</span>
+                </button>
+              )}
             </div>
           </div>
           {process.env.NEXT_PUBLIC_TURKISH !== 'ZUBEYR' && (
@@ -1235,6 +1327,11 @@ export default function Home() {
               <button className={`source-btn ${activeSeller === 'namesearch' ? 'active' : ''}`} onClick={() => { setActiveSeller('namesearch'); setHasanFilter(false); }}>
                 NameSearch<span className="count">{sellerCounts.namesearch ?? '-'}</span>
               </button>
+              {process.env.NEXT_PUBLIC_TURKISH === 'HASAN' && (
+                <button className={`source-btn ${activeSeller === 'medicine' ? 'active' : ''}`} onClick={() => { setActiveSeller('medicine'); setHasanFilter(false); }}>
+                  Medicine<span className="count">{sellerCounts.medicine ?? '-'}</span>
+                </button>
+              )}
             </div>
           </div>
           )}
