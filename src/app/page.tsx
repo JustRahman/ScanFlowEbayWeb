@@ -935,7 +935,7 @@ export default function Home() {
         updateData.bought_at = new Date().toISOString();
       }
 
-      const table = activeSeller === 'keepa' ? KP_TABLE : activeSeller === 'bookfinder' ? BF_TABLE : activeSeller === 'amazon' ? AM_TABLE : activeSeller === 'christianbook' ? CB_TABLE : activeSeller === 'namesearch' ? NS_TABLE : TABLE;
+      const table = activeSeller === 'keepa' ? KP_TABLE : activeSeller === 'bookfinder' ? BF_TABLE : activeSeller === 'amazon' ? AM_TABLE : activeSeller === 'christianbook' ? CB_TABLE : activeSeller === 'namesearch' ? (process.env.NEXT_PUBLIC_TURKISH === 'HASAN' ? MINI_TABLE : NS_TABLE) : activeSeller === 'medicine' ? MINI_TABLE : activeSeller === 'zoombookscompany' ? ZM_TABLE : TABLE;
       const keepaBook = activeSeller === 'keepa' ? allKeepa.find(b => b.id === bookId) : null;
       const patchKey = activeSeller === 'keepa' ? `asin=eq.${keepaBook?.isbn}` : `id=eq.${bookId}`;
       const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${patchKey}`, {
