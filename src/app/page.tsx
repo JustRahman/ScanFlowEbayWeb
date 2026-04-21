@@ -489,7 +489,7 @@ export default function Home() {
           fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=id&seller=eq.${encodeURIComponent(seller)}&decision=eq.REVIEW`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
           fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=id&seller=eq.${encodeURIComponent(seller)}&decision=eq.REJECT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
           fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=id&seller=eq.${encodeURIComponent(seller)}&decision=eq.BOUGHT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
-          fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=id&seller=eq.${encodeURIComponent(seller)}&bought_at=gte.${twentyFourHoursAgo}`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+          fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=id&seller=eq.${encodeURIComponent(seller)}&scraped_at=gte.${twentyFourHoursAgo}`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
         ]);
         const parseCount = (res: Response) => {
           const range = res.headers.get('content-range');
@@ -506,7 +506,7 @@ export default function Home() {
         fetch(`${SUPABASE_URL}/rest/v1/${BF_TABLE}?select=id&decision=eq.REVIEW`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
         fetch(`${SUPABASE_URL}/rest/v1/${BF_TABLE}?select=id&decision=eq.REJECT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
         fetch(`${SUPABASE_URL}/rest/v1/${BF_TABLE}?select=id&decision=eq.BOUGHT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
-        fetch(`${SUPABASE_URL}/rest/v1/${BF_TABLE}?select=id&bought_at=gte.${twentyFourHoursAgo}`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${SUPABASE_URL}/rest/v1/${BF_TABLE}?select=id&scraped_at=gte.${twentyFourHoursAgo}`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
       ]);
       const bfParseCount = (res: Response) => {
         const range = res.headers.get('content-range');
@@ -564,41 +564,44 @@ export default function Home() {
       const nsBase = process.env.NEXT_PUBLIC_TURKISH === 'HASAN'
         ? `${SUPABASE_URL}/rest/v1/${MINI_TABLE}?select=id&project=eq.namesearch`
         : `${SUPABASE_URL}/rest/v1/${NS_TABLE}?select=id`;
-      const [nsTotalRes, nsBuyRes, nsReviewRes, nsRejectRes, nsBoughtRes] = await Promise.all([
+      const [nsTotalRes, nsBuyRes, nsReviewRes, nsRejectRes, nsBoughtRes, nsTodayRes] = await Promise.all([
         fetch(nsBase, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
         fetch(`${nsBase}&decision=eq.BUY`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
         fetch(`${nsBase}&decision=eq.REVIEW`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
         fetch(`${nsBase}&decision=eq.REJECT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
         fetch(`${nsBase}&decision=eq.BOUGHT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${nsBase}&scraped_at=gte.${twentyFourHoursAgo}`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
       ]);
       counts.namesearch = {
         total: bfParseCount(nsTotalRes), buy: bfParseCount(nsBuyRes), review: bfParseCount(nsReviewRes),
-        reject: bfParseCount(nsRejectRes), bought: bfParseCount(nsBoughtRes), today: 0,
+        reject: bfParseCount(nsRejectRes), bought: bfParseCount(nsBoughtRes), today: bfParseCount(nsTodayRes),
       };
       // Fetch zoombookscompany stats (always from ebay_books)
-      const [zmTotalRes, zmBuyRes, zmReviewRes, zmRejectRes, zmBoughtRes] = await Promise.all([
+      const [zmTotalRes, zmBuyRes, zmReviewRes, zmRejectRes, zmBoughtRes, zmTodayRes] = await Promise.all([
         fetch(`${SUPABASE_URL}/rest/v1/${ZM_TABLE}?select=id&seller=eq.zoombookscompany`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
         fetch(`${SUPABASE_URL}/rest/v1/${ZM_TABLE}?select=id&seller=eq.zoombookscompany&decision=eq.BUY`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
         fetch(`${SUPABASE_URL}/rest/v1/${ZM_TABLE}?select=id&seller=eq.zoombookscompany&decision=eq.REVIEW`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
         fetch(`${SUPABASE_URL}/rest/v1/${ZM_TABLE}?select=id&seller=eq.zoombookscompany&decision=eq.REJECT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
         fetch(`${SUPABASE_URL}/rest/v1/${ZM_TABLE}?select=id&seller=eq.zoombookscompany&decision=eq.BOUGHT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${SUPABASE_URL}/rest/v1/${ZM_TABLE}?select=id&seller=eq.zoombookscompany&scraped_at=gte.${twentyFourHoursAgo}`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
       ]);
       counts.zoombookscompany = {
         total: bfParseCount(zmTotalRes), buy: bfParseCount(zmBuyRes), review: bfParseCount(zmReviewRes),
-        reject: bfParseCount(zmRejectRes), bought: bfParseCount(zmBoughtRes), today: 0,
+        reject: bfParseCount(zmRejectRes), bought: bfParseCount(zmBoughtRes), today: bfParseCount(zmTodayRes),
       };
       // Fetch medicine stats (minibooks, project=medicine)
       const medBase = `${SUPABASE_URL}/rest/v1/${MINI_TABLE}?select=id&project=eq.medicine`;
-      const [medTotalRes, medBuyRes, medReviewRes, medRejectRes, medBoughtRes] = await Promise.all([
+      const [medTotalRes, medBuyRes, medReviewRes, medRejectRes, medBoughtRes, medTodayRes] = await Promise.all([
         fetch(medBase, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
         fetch(`${medBase}&decision=eq.BUY`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
         fetch(`${medBase}&decision=eq.REVIEW`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
         fetch(`${medBase}&decision=eq.REJECT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
         fetch(`${medBase}&decision=eq.BOUGHT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${medBase}&scraped_at=gte.${twentyFourHoursAgo}`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
       ]);
       counts.medicine = {
         total: bfParseCount(medTotalRes), buy: bfParseCount(medBuyRes), review: bfParseCount(medReviewRes),
-        reject: bfParseCount(medRejectRes), bought: bfParseCount(medBoughtRes), today: 0,
+        reject: bfParseCount(medRejectRes), bought: bfParseCount(medBoughtRes), today: bfParseCount(medTodayRes),
       };
       setStatCounts(counts);
     } catch (error) {
