@@ -64,6 +64,10 @@ interface Book {
   amazon_url: string | null;
   best_offer_price: number | null;
   best_offer_seller: string | null;
+  // Shadow-mode seasonal pricing (A/B comparison; may be null for older rows)
+  new_decision: string | null;
+  price_3mo: number | null;       // cents — next-3-months realistic price
+  price_source: string | null;    // 'annual' | 'three_month'
   // BooksFinder fields
   url?: string;
   edition?: string;
@@ -1046,6 +1050,8 @@ export default function Home() {
     const buyPrice = book.price / 100;
     const amazonPrice = book.amazon_price ? book.amazon_price / 100 : null;
     const bestOfferPrice = book.best_offer_price ? book.best_offer_price / 100 : null;
+    const price3Mo = book.price_3mo != null ? book.price_3mo / 100 : null;
+    const shadowDiverges = book.new_decision != null && book.new_decision !== book.decision;
     const hasSiteLink = book.seller_url && (book.seller === 'booksrun' || book.seller === 'betterworldbooks') && process.env.NEXT_PUBLIC_TURKISH !== 'ZUBEYR';
     const salesRank = book.sales_rank;
     const roi = amazonPrice && buyPrice > 0 ? amazonPrice / buyPrice : null;
@@ -1059,9 +1065,25 @@ export default function Home() {
       <div key={book.id} className={`book-card${isUnseen ? ' unseen' : ''}${process.env.NEXT_PUBLIC_TURKISH === 'ZUBEYR' ? ' zubeyr-large' : ''}`}>
         <div className="book-card-content">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
-            {book.decision ? (
-              <span className={`decision-badge ${book.decision}`}>{book.decision}</span>
-            ) : <span />}
+            <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              {book.decision ? (
+                <span className={`decision-badge ${book.decision}`}>{book.decision}</span>
+              ) : null}
+              {book.new_decision && (
+                <span
+                  className={`decision-badge ${book.new_decision}`}
+                  style={{
+                    fontSize: '0.65rem',
+                    padding: '0.15rem 0.45rem',
+                    opacity: shadowDiverges ? 1 : 0.5,
+                    outline: shadowDiverges ? '1px dashed currentColor' : 'none',
+                  }}
+                  title={`Shadow decision (seasonal pricing, source: ${book.price_source || 'annual'})${shadowDiverges ? ' — DIVERGES' : ' — matches'}`}
+                >
+                  NEW: {book.new_decision}
+                </span>
+              )}
+            </div>
             {book.amazon_flag && (
               <span className={`amazon-flag ${book.amazon_flag}`} title={
                 book.amazon_flag === 'green' ? 'Amazon out >50% of time' :
@@ -1103,6 +1125,20 @@ export default function Home() {
               <div className="price-row">
                 <span className="price-label">Amazon Price</span>
                 <span className="price-value">${amazonPrice.toFixed(2)}</span>
+              </div>
+            )}
+            {price3Mo !== null && (
+              <div className="price-row" title={`Next-3-months avg price from Keepa history (source used: ${book.price_source || 'annual'})`}>
+                <span className="price-label">
+                  3-mo Price
+                  {book.price_source === 'three_month' && <span style={{ marginLeft: 4, color: '#2ed573', fontWeight: 700 }}>★</span>}
+                </span>
+                <span
+                  className="price-value"
+                  style={{ color: book.price_source === 'three_month' ? '#2ed573' : '#8b949e' }}
+                >
+                  ${price3Mo.toFixed(2)}
+                </span>
               </div>
             )}
             {salesRank !== null && (
