@@ -215,7 +215,7 @@ export default function Home() {
   const fetchBooksForSeller = useCallback(async (seller: string): Promise<Book[]> => {
     try {
       const idFilter = process.env.NEXT_PUBLIC_TURKISH === 'HASAN'
-        ? '&id=gte.160734'
+        ? '&id=gte.188463'
         : process.env.NEXT_PUBLIC_TURKISH === 'ZUBEYR' ? '&id=gte.150180' : '';
       const conditionFilter = seller === 'booksrun' ? '&condition=neq.Brand%20New' : '';
       const fetches: Promise<Response>[] = [
