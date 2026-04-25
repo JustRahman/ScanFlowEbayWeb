@@ -1118,7 +1118,7 @@ export default function Home() {
               {book.decision ? (
                 <span className={`decision-badge ${book.decision}`}>{book.decision}</span>
               ) : null}
-              {book.new_decision && (
+              {book.new_decision && process.env.NEXT_PUBLIC_TURKISH !== 'ZUBEYR' && (
                 <span
                   className={`decision-badge ${book.new_decision}`}
                   style={{
