@@ -12,7 +12,7 @@ const CB_TABLE = 'christianbook_books';
 const EN_TABLE = 'ebay_books_new';
 const KP_TABLE = 'keepa_books';
 const NS_TABLE = 'namesearch_books';
-const ZM_TABLE = 'ebay_books';
+const ZM_TABLE = process.env.NEXT_PUBLIC_TURKISH === 'ZUBEYR' ? 'ebay_books_zubeyr' : 'ebay_books';
 const MINI_TABLE = 'minibooks';
 
 
