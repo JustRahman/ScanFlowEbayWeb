@@ -184,7 +184,7 @@ export default function Home() {
   const [allMedicine, setAllMedicine] = useState<Book[]>([]);
   const [unseenIds, setUnseenIds] = useState<Set<string>>(new Set());
 
-  // ── Admin panel state (HASAN + ghost only) ──
+  // ── Admin panel state (HASAN only) ──
   const [adminMode, setAdminMode] = useState(false);
   const [adminBooks, setAdminBooks] = useState<Book[]>([]);
   const [adminSelected, setAdminSelected] = useState<Set<number>>(new Set());
@@ -192,6 +192,9 @@ export default function Home() {
   const [adminPendingCount, setAdminPendingCount] = useState(0);
   const [adminDecisionFilter, setAdminDecisionFilter] = useState<'all' | 'BUY' | 'REVIEW'>('all');
   const [adminSellerFilter, setAdminSellerFilter] = useState('all');
+  const [adminPwModal, setAdminPwModal] = useState(false);
+  const [adminPwInput, setAdminPwInput] = useState('');
+  const [adminPwError, setAdminPwError] = useState(false);
   const [zubeyrBoughtCount, setZubeyrBoughtCount] = useState<number | null>(null);
   const [zubeyrTotalBoughtCount, setZubeyrTotalBoughtCount] = useState<number | null>(null);
 
@@ -1357,7 +1360,7 @@ export default function Home() {
   }
 
   // ── Admin Panel (HASAN + ghost only) ──
-  if (adminMode && isGhost && process.env.NEXT_PUBLIC_TURKISH === 'HASAN') {
+  if (adminMode && process.env.NEXT_PUBLIC_TURKISH === 'HASAN') {
     const filtered = adminBooks.filter(b => {
       if (adminDecisionFilter !== 'all' && b.decision !== adminDecisionFilter) return false;
       if (adminSellerFilter !== 'all' && b.seller !== adminSellerFilter) return false;
@@ -1420,6 +1423,7 @@ export default function Home() {
                     }} />
                   </th>
                   <th style={{ padding: '0.5rem' }}>Title</th>
+                  <th style={{ padding: '0.5rem' }}>Links</th>
                   <th style={{ padding: '0.5rem' }}>Seller</th>
                   <th style={{ padding: '0.5rem' }}>Decision</th>
                   <th style={{ padding: '0.5rem' }}>Buy $</th>
@@ -1446,8 +1450,12 @@ export default function Home() {
                           setAdminSelected(next);
                         }} />
                       </td>
-                      <td style={{ padding: '0.5rem', maxWidth: '260px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        <a href={b.ebay_url} target="_blank" rel="noreferrer" style={{ color: '#74b9ff', textDecoration: 'none' }}>{b.title}</a>
+                      <td style={{ padding: '0.5rem', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#e0e0e0' }}>{b.title}</td>
+                      <td style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>
+                        <a href={b.ebay_url} target="_blank" rel="noreferrer" style={{ color: '#74b9ff', textDecoration: 'none', fontSize: '0.78rem', marginRight: '0.5rem' }}>eBay</a>
+                        {b.seller === 'booksrun' && b.seller_url && (
+                          <a href={b.seller_url} target="_blank" rel="noreferrer" style={{ color: '#a29bfe', textDecoration: 'none', fontSize: '0.78rem' }}>BooksRun</a>
+                        )}
                       </td>
                       <td style={{ padding: '0.5rem', color: '#aaa' }}>{b.seller}</td>
                       <td style={{ padding: '0.5rem' }}>
@@ -1483,11 +1491,35 @@ export default function Home() {
       )}
       {/* Header */}
       <div className="header">
-        {isGhost && process.env.NEXT_PUBLIC_TURKISH === 'HASAN' && (
+        {process.env.NEXT_PUBLIC_TURKISH === 'HASAN' && (
           <div style={{ textAlign: 'right', marginBottom: '0.5rem' }}>
-            <button onClick={() => { setAdminMode(true); fetchAdminBooks(); }} style={{ background: '#e17055', border: 'none', color: '#fff', borderRadius: '0.4rem', padding: '0.4rem 1rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}>
+            <button onClick={() => { setAdminPwInput(''); setAdminPwError(false); setAdminPwModal(true); }} style={{ background: '#e17055', border: 'none', color: '#fff', borderRadius: '0.4rem', padding: '0.4rem 1rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}>
               Admin Panel {adminPendingCount > 0 ? `(${adminPendingCount})` : ''}
             </button>
+          </div>
+        )}
+        {/* Admin password modal */}
+        {adminPwModal && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setAdminPwModal(false)}>
+            <div style={{ background: '#fff', borderRadius: '0.75rem', padding: '2rem', width: '300px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+              <h3 style={{ margin: '0 0 1rem', fontSize: '1.1rem' }}>Admin Access</h3>
+              <form onSubmit={e => {
+                e.preventDefault();
+                if (adminPwInput === '456456') {
+                  setAdminPwModal(false);
+                  setAdminPwInput('');
+                  setAdminMode(true);
+                  fetchAdminBooks();
+                } else {
+                  setAdminPwError(true);
+                  setAdminPwInput('');
+                }
+              }}>
+                <input type="password" value={adminPwInput} onChange={e => { setAdminPwInput(e.target.value); setAdminPwError(false); }} placeholder="Password" autoFocus style={{ width: '100%', padding: '0.6rem', borderRadius: '0.4rem', border: `1px solid ${adminPwError ? '#e74c3c' : '#ddd'}`, fontSize: '1rem', boxSizing: 'border-box', marginBottom: '0.5rem' }} />
+                {adminPwError && <p style={{ color: '#e74c3c', fontSize: '0.82rem', margin: '0 0 0.5rem' }}>Wrong password</p>}
+                <button type="submit" style={{ width: '100%', padding: '0.6rem', background: '#e17055', border: 'none', color: '#fff', borderRadius: '0.4rem', fontWeight: 600, cursor: 'pointer', fontSize: '0.95rem' }}>Enter</button>
+              </form>
+            </div>
           </div>
         )}
         <h1>{activeSeller === 'bookfinder' ? 'BooksFinder' : activeSeller === 'amazon' ? 'Amazon' : activeSeller === 'christianbook' ? 'ChristianBook' : activeSeller === 'ebay_new' ? 'eBay New' : activeSeller === 'keepa' ? 'Keepa' : activeSeller === 'namesearch' ? 'NameSearch' : activeSeller === 'medicine' ? 'Medicine' : (SELLERS.find(s => s.id === activeSeller)?.label ?? activeSeller)} Deals</h1>
