@@ -183,6 +183,15 @@ export default function Home() {
   const [allZoombooks, setAllZoombooks] = useState<Book[]>([]);
   const [allMedicine, setAllMedicine] = useState<Book[]>([]);
   const [unseenIds, setUnseenIds] = useState<Set<string>>(new Set());
+
+  // ── Admin panel state (HASAN + ghost only) ──
+  const [adminMode, setAdminMode] = useState(false);
+  const [adminBooks, setAdminBooks] = useState<Book[]>([]);
+  const [adminSelected, setAdminSelected] = useState<Set<number>>(new Set());
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminPendingCount, setAdminPendingCount] = useState(0);
+  const [adminDecisionFilter, setAdminDecisionFilter] = useState<'all' | 'BUY' | 'REVIEW'>('all');
+  const [adminSellerFilter, setAdminSellerFilter] = useState('all');
   const [zubeyrBoughtCount, setZubeyrBoughtCount] = useState<number | null>(null);
   const [zubeyrTotalBoughtCount, setZubeyrTotalBoughtCount] = useState<number | null>(null);
 
@@ -217,19 +226,20 @@ export default function Home() {
       const idFilter = process.env.NEXT_PUBLIC_TURKISH === 'HASAN'
         ? '&id=gte.188463'
         : process.env.NEXT_PUBLIC_TURKISH === 'ZUBEYR' ? '&id=gte.150180' : '';
+      const displayFilter = process.env.NEXT_PUBLIC_TURKISH === 'HASAN' ? '&display=eq.1' : '';
       const conditionFilter = seller === 'booksrun' ? '&condition=neq.Brand%20New' : '';
       const fetches: Promise<Response>[] = [
-        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.BUY${idFilter}${conditionFilter}`, {
+        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.BUY${idFilter}${displayFilter}${conditionFilter}`, {
           headers: HEADERS
         }),
-        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.REVIEW${idFilter}${conditionFilter}`, {
+        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.REVIEW${idFilter}${displayFilter}${conditionFilter}`, {
           headers: HEADERS
         }),
       ];
       // For greatbookprices1, also fetch REJECT books
       if (seller === 'greatbookprices1') {
         fetches.push(
-          fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.REJECT${idFilter}`, {
+          fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.REJECT${idFilter}${displayFilter}`, {
             headers: HEADERS
           })
         );
@@ -481,19 +491,58 @@ export default function Home() {
     }
   }, []);
 
+  // ── Admin: fetch unpublished books (display=0, HASAN only) ──
+  const fetchAdminBooks = useCallback(async () => {
+    setAdminLoading(true);
+    try {
+      const idFilter = '&id=gte.188463';
+      const [buyRes, reviewRes] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&display=eq.0&decision=eq.BUY${idFilter}`, { headers: HEADERS }),
+        fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&display=eq.0&decision=eq.REVIEW${idFilter}`, { headers: HEADERS }),
+      ]);
+      const buy: Book[] = buyRes.ok ? await buyRes.json() : [];
+      const review: Book[] = reviewRes.ok ? await reviewRes.json() : [];
+      const all = [...buy, ...review];
+      setAdminBooks(all);
+      setAdminPendingCount(all.length);
+    } catch (e) {
+      console.error('Admin fetch error:', e);
+    }
+    setAdminLoading(false);
+  }, []);
+
+  const publishBooks = useCallback(async (ids: number[]) => {
+    if (ids.length === 0) return;
+    await Promise.all(ids.map(id =>
+      fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?id=eq.${id}`, {
+        method: 'PATCH',
+        headers: { ...HEADERS, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+        body: JSON.stringify({ display: 1 }),
+      })
+    ));
+    setAdminBooks(prev => {
+      const next = prev.filter(b => !ids.includes(b.id));
+      setAdminPendingCount(next.length);
+      return next;
+    });
+    setAdminSelected(new Set());
+  }, []);
+
   // ── Fetch stat counts per seller (single lightweight query) ──
   const fetchStatCounts = useCallback(async () => {
     try {
       const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       const sellers: Seller[] = ['booksrun', 'oneplanetbooks', 'thrift.books', 'betterworldbooks', 'greenworldbooks', 'greatbookprices1', 'betterworldbookswest', 'zuber', 'baystatebooks', 'Awesomebooksusa', 'goodwillswpa', 'goodwillbks', 'sensational-buys'];
+      const statDisplayFilter = process.env.NEXT_PUBLIC_TURKISH === 'HASAN' ? '&display=eq.1' : '';
       const results = await Promise.all(sellers.map(async (seller) => {
+        const base = `${SUPABASE_URL}/rest/v1/${TABLE}?select=id&seller=eq.${encodeURIComponent(seller)}${statDisplayFilter}`;
         const [totalRes, buyRes, reviewRes, rejectRes, boughtRes, todayRes] = await Promise.all([
-          fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=id&seller=eq.${encodeURIComponent(seller)}`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
-          fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=id&seller=eq.${encodeURIComponent(seller)}&decision=eq.BUY`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
-          fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=id&seller=eq.${encodeURIComponent(seller)}&decision=eq.REVIEW`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
-          fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=id&seller=eq.${encodeURIComponent(seller)}&decision=eq.REJECT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
-          fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=id&seller=eq.${encodeURIComponent(seller)}&decision=eq.BOUGHT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
-          fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=id&seller=eq.${encodeURIComponent(seller)}&scraped_at=gte.${twentyFourHoursAgo}`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+          fetch(base, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+          fetch(`${base}&decision=eq.BUY`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+          fetch(`${base}&decision=eq.REVIEW`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+          fetch(`${base}&decision=eq.REJECT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+          fetch(`${base}&decision=eq.BOUGHT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+          fetch(`${base}&scraped_at=gte.${twentyFourHoursAgo}`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
         ]);
         const parseCount = (res: Response) => {
           const range = res.headers.get('content-range');
@@ -1307,6 +1356,122 @@ export default function Home() {
     );
   }
 
+  // ── Admin Panel (HASAN + ghost only) ──
+  if (adminMode && isGhost && process.env.NEXT_PUBLIC_TURKISH === 'HASAN') {
+    const filtered = adminBooks.filter(b => {
+      if (adminDecisionFilter !== 'all' && b.decision !== adminDecisionFilter) return false;
+      if (adminSellerFilter !== 'all' && b.seller !== adminSellerFilter) return false;
+      return true;
+    });
+    const sellers = Array.from(new Set(adminBooks.map(b => b.seller))).sort();
+    const allSelected = filtered.length > 0 && filtered.every(b => adminSelected.has(b.id));
+
+    return (
+      <div style={{ minHeight: '100vh', background: '#0f0f1a', color: '#e0e0e0', fontFamily: 'sans-serif' }}>
+        {/* Admin header */}
+        <div style={{ background: '#1a1a2e', borderBottom: '2px solid #e17055', padding: '1rem 1.5rem', display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+          <button onClick={() => setAdminMode(false)} style={{ background: 'transparent', border: '1px solid #666', color: '#aaa', borderRadius: '0.4rem', padding: '0.4rem 0.8rem', cursor: 'pointer', fontSize: '0.85rem' }}>← User View</button>
+          <h1 style={{ margin: 0, fontSize: '1.3rem', color: '#e17055' }}>Admin Panel</h1>
+          <span style={{ background: '#e17055', color: '#fff', borderRadius: '1rem', padding: '0.2rem 0.7rem', fontSize: '0.8rem', fontWeight: 700 }}>{adminPendingCount} pending</span>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            <button onClick={fetchAdminBooks} disabled={adminLoading} style={{ background: '#2a2a3e', border: '1px solid #444', color: '#ccc', borderRadius: '0.4rem', padding: '0.4rem 0.9rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+              {adminLoading ? 'Loading…' : '↻ Refresh'}
+            </button>
+            <button
+              onClick={() => publishBooks(filtered.filter(b => b.decision === 'BUY').map(b => b.id))}
+              disabled={adminLoading}
+              style={{ background: '#00b894', border: 'none', color: '#fff', borderRadius: '0.4rem', padding: '0.4rem 0.9rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}
+            >Publish All BUY ({filtered.filter(b => b.decision === 'BUY').length})</button>
+            <button
+              onClick={() => publishBooks(Array.from(adminSelected))}
+              disabled={adminSelected.size === 0 || adminLoading}
+              style={{ background: adminSelected.size > 0 ? '#6c5ce7' : '#333', border: 'none', color: '#fff', borderRadius: '0.4rem', padding: '0.4rem 0.9rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}
+            >Publish Selected ({adminSelected.size})</button>
+          </div>
+        </div>
+
+        {/* Filters */}
+        <div style={{ padding: '0.75rem 1.5rem', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', borderBottom: '1px solid #2a2a3e' }}>
+          {(['all', 'BUY', 'REVIEW'] as const).map(d => (
+            <button key={d} onClick={() => setAdminDecisionFilter(d)} style={{ background: adminDecisionFilter === d ? '#6c5ce7' : '#2a2a3e', border: 'none', color: '#fff', borderRadius: '0.4rem', padding: '0.35rem 0.8rem', cursor: 'pointer', fontSize: '0.8rem', fontWeight: adminDecisionFilter === d ? 700 : 400 }}>{d === 'all' ? 'All Decisions' : d}</button>
+          ))}
+          <select value={adminSellerFilter} onChange={e => setAdminSellerFilter(e.target.value)} style={{ background: '#2a2a3e', border: '1px solid #444', color: '#ccc', borderRadius: '0.4rem', padding: '0.35rem 0.6rem', fontSize: '0.8rem' }}>
+            <option value="all">All Sellers</option>
+            {sellers.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <span style={{ color: '#888', fontSize: '0.8rem' }}>{filtered.length} books shown</span>
+        </div>
+
+        {/* Table */}
+        <div style={{ overflowX: 'auto', padding: '0 1.5rem 2rem' }}>
+          {adminLoading ? (
+            <div style={{ textAlign: 'center', padding: '3rem', color: '#888' }}>Loading…</div>
+          ) : filtered.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '3rem', color: '#888' }}>No pending books{adminBooks.length > 0 ? ' for this filter' : '. Click Refresh to load.'}
+            </div>
+          ) : (
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem', marginTop: '0.75rem' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid #2a2a3e', color: '#888', textAlign: 'left' }}>
+                  <th style={{ padding: '0.5rem 0.5rem' }}>
+                    <input type="checkbox" checked={allSelected} onChange={e => {
+                      if (e.target.checked) setAdminSelected(new Set(filtered.map(b => b.id)));
+                      else setAdminSelected(new Set());
+                    }} />
+                  </th>
+                  <th style={{ padding: '0.5rem' }}>Title</th>
+                  <th style={{ padding: '0.5rem' }}>Seller</th>
+                  <th style={{ padding: '0.5rem' }}>Decision</th>
+                  <th style={{ padding: '0.5rem' }}>Buy $</th>
+                  <th style={{ padding: '0.5rem' }}>Amazon $</th>
+                  <th style={{ padding: '0.5rem' }}>Mult.</th>
+                  <th style={{ padding: '0.5rem' }}>FBA Profit</th>
+                  <th style={{ padding: '0.5rem' }}>Scraped</th>
+                  <th style={{ padding: '0.5rem' }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(b => {
+                  const buyP = b.price / 100;
+                  const amP = b.amazon_price ? b.amazon_price / 100 : null;
+                  const mult = amP && buyP > 0 ? (amP / buyP).toFixed(1) : '—';
+                  const profit = b.fba_profit != null ? (b.fba_profit / 100).toFixed(2) : '—';
+                  const sel = adminSelected.has(b.id);
+                  return (
+                    <tr key={b.id} style={{ borderBottom: '1px solid #1e1e2e', background: sel ? 'rgba(108,92,231,0.15)' : 'transparent' }}>
+                      <td style={{ padding: '0.5rem 0.5rem' }}>
+                        <input type="checkbox" checked={sel} onChange={e => {
+                          const next = new Set(adminSelected);
+                          if (e.target.checked) next.add(b.id); else next.delete(b.id);
+                          setAdminSelected(next);
+                        }} />
+                      </td>
+                      <td style={{ padding: '0.5rem', maxWidth: '260px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <a href={b.ebay_url} target="_blank" rel="noreferrer" style={{ color: '#74b9ff', textDecoration: 'none' }}>{b.title}</a>
+                      </td>
+                      <td style={{ padding: '0.5rem', color: '#aaa' }}>{b.seller}</td>
+                      <td style={{ padding: '0.5rem' }}>
+                        <span style={{ background: b.decision === 'BUY' ? '#00b894' : '#fdcb6e', color: b.decision === 'BUY' ? '#fff' : '#333', borderRadius: '0.3rem', padding: '0.15rem 0.5rem', fontWeight: 700, fontSize: '0.75rem' }}>{b.decision}</span>
+                      </td>
+                      <td style={{ padding: '0.5rem', color: '#f0f0f0' }}>${buyP.toFixed(2)}</td>
+                      <td style={{ padding: '0.5rem', color: '#81c784' }}>{amP ? `$${amP.toFixed(2)}` : '—'}</td>
+                      <td style={{ padding: '0.5rem', color: '#fdcb6e', fontWeight: 600 }}>{mult}x</td>
+                      <td style={{ padding: '0.5rem', color: profit !== '—' && parseFloat(profit) > 0 ? '#00b894' : '#e17055' }}>{profit !== '—' ? `$${profit}` : '—'}</td>
+                      <td style={{ padding: '0.5rem', color: '#888', fontSize: '0.75rem' }}>{new Date(b.scraped_at).toLocaleDateString()}</td>
+                      <td style={{ padding: '0.5rem' }}>
+                        <button onClick={() => publishBooks([b.id])} style={{ background: '#00b894', border: 'none', color: '#fff', borderRadius: '0.3rem', padding: '0.25rem 0.6rem', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600 }}>Publish</button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
       {/* Zubeyr bought counter */}
@@ -1318,6 +1483,13 @@ export default function Home() {
       )}
       {/* Header */}
       <div className="header">
+        {isGhost && process.env.NEXT_PUBLIC_TURKISH === 'HASAN' && (
+          <div style={{ textAlign: 'right', marginBottom: '0.5rem' }}>
+            <button onClick={() => { setAdminMode(true); fetchAdminBooks(); }} style={{ background: '#e17055', border: 'none', color: '#fff', borderRadius: '0.4rem', padding: '0.4rem 1rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}>
+              Admin Panel {adminPendingCount > 0 ? `(${adminPendingCount})` : ''}
+            </button>
+          </div>
+        )}
         <h1>{activeSeller === 'bookfinder' ? 'BooksFinder' : activeSeller === 'amazon' ? 'Amazon' : activeSeller === 'christianbook' ? 'ChristianBook' : activeSeller === 'ebay_new' ? 'eBay New' : activeSeller === 'keepa' ? 'Keepa' : activeSeller === 'namesearch' ? 'NameSearch' : activeSeller === 'medicine' ? 'Medicine' : (SELLERS.find(s => s.id === activeSeller)?.label ?? activeSeller)} Deals</h1>
         <p>{activeSeller === 'bookfinder' ? 'Books from BooksFinder' : activeSeller === 'amazon' ? 'Books from Amazon' : activeSeller === 'christianbook' ? 'Books from ChristianBook.com' : activeSeller === 'ebay_new' ? 'New books from eBay' : activeSeller === 'keepa' ? 'Top BUY books from Keepa' : activeSeller === 'namesearch' ? 'Books from NameSearch' : activeSeller === 'medicine' ? 'Medicine books' : `Books from ${SELLERS.find(s => s.id === activeSeller)?.label ?? activeSeller} on eBay`}</p>
 
