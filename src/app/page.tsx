@@ -1570,7 +1570,6 @@ export default function Home() {
         <div onDoubleClick={() => setNotReadyVisible(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
           <div style={{ background: '#c0392b', borderRadius: '1.2rem', padding: '2.5rem 4rem', textAlign: 'center', boxShadow: '0 0 60px rgba(192,57,43,0.6)', userSelect: 'none' }}>
             <div style={{ color: '#fff', fontSize: '3rem', fontWeight: 900, letterSpacing: '0.1em' }}>NOT READY</div>
-            <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.85rem', marginTop: '0.75rem' }}>double-click to dismiss</div>
           </div>
         </div>
       )}
