@@ -1387,6 +1387,7 @@ export default function Home() {
     const allSelected = filtered.length > 0 && filtered.every(b => adminSelected.has(b.id));
 
     return (
+      <>
       <div style={{ minHeight: '100vh', background: '#0f0f1a', color: '#e0e0e0', fontFamily: 'sans-serif' }}>
         {/* Admin header */}
         <div style={{ background: '#1a1a2e', borderBottom: '2px solid #e17055', padding: '1rem 1.5rem', display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
@@ -1511,6 +1512,53 @@ export default function Home() {
           )}
         </div>
       </div>
+      {priceHistoryAsin && (() => {
+        const W = 780, H = 320, PAD = 50;
+        const points = priceHistoryData.filter(d => d.new_price_cents || d.amazon_price_cents);
+        const allVals = points.flatMap(d => [d.new_price_cents, d.amazon_price_cents].filter((v): v is number => v != null));
+        const minV = Math.min(...allVals), maxV = Math.max(...allVals);
+        const range = Math.max(maxV - minV, 1);
+        const xScale = (i: number) => PAD + (i / Math.max(points.length - 1, 1)) * (W - PAD * 2);
+        const yScale = (v: number) => PAD + (1 - (v - minV) / range) * (H - PAD * 2);
+        const linePath = (key: 'new_price_cents' | 'amazon_price_cents') => {
+          const pts = points.map((d, i) => d[key] != null ? `${xScale(i)},${yScale(d[key]!)}` : null).filter(Boolean);
+          if (pts.length < 2) return null;
+          return pts.join(' ');
+        };
+        const hoverPoint = hoverIdx != null ? points[hoverIdx] : null;
+        const hoverX = hoverIdx != null ? xScale(hoverIdx) : null;
+        return (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            onClick={() => { setPriceHistoryAsin(null); setHoverIdx(null); }}>
+            <div style={{ background: '#1e2130', borderRadius: '1rem', padding: '1.5rem 2rem', boxShadow: '0 24px 48px rgba(0,0,0,0.4)' }} onClick={e => e.stopPropagation()}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                <div style={{ color: '#fff', fontWeight: 700, fontSize: '1rem' }}>Price History — {priceHistoryAsin}</div>
+                <button onClick={() => { setPriceHistoryAsin(null); setHoverIdx(null); }} style={{ background: 'none', border: 'none', color: '#aaa', fontSize: '1.4rem', cursor: 'pointer' }}>×</button>
+              </div>
+              {priceHistoryLoading ? (
+                <div style={{ color: '#aaa', textAlign: 'center', padding: '2rem' }}>Loading...</div>
+              ) : points.length === 0 ? (
+                <div style={{ color: '#aaa', textAlign: 'center', padding: '2rem' }}>No price history found.</div>
+              ) : (
+                <>
+                  <svg width={W} height={H} style={{ display: 'block', margin: '0 auto', cursor: 'crosshair' }}
+                    onMouseMove={e => { const rect = (e.currentTarget as SVGSVGElement).getBoundingClientRect(); const mx = e.clientX - rect.left; const idx = Math.round((mx - PAD) / (W - PAD * 2) * (points.length - 1)); setHoverIdx(Math.max(0, Math.min(points.length - 1, idx))); }}
+                    onMouseLeave={() => setHoverIdx(null)}>
+                    {[0, 0.25, 0.5, 0.75, 1].map(t => { const y = PAD + t * (H - PAD * 2); const val = maxV - t * range; return <g key={t}><line x1={PAD} y1={y} x2={W - PAD} y2={y} stroke="#2a2d3e" strokeWidth="1" /><text x={PAD - 6} y={y + 4} textAnchor="end" fill="#666" fontSize="11">${(val / 100).toFixed(0)}</text></g>; })}
+                    {(['new_price_cents', 'amazon_price_cents'] as const).map((key, ki) => { const pts = linePath(key); if (!pts) return null; const color = ki === 0 ? '#4fc3f7' : '#81c784'; return <g key={key}><polyline points={pts} fill="none" stroke={color} strokeWidth="2" />{points.map((d, i) => d[key] != null ? <circle key={i} cx={xScale(i)} cy={yScale(d[key]!)} r="3" fill={color} /> : null)}</g>; })}
+                    {hoverX != null && hoverPoint && <><line x1={hoverX} y1={PAD} x2={hoverX} y2={H - PAD} stroke="#ffffff30" strokeWidth="1" strokeDasharray="4 3" />{hoverPoint.new_price_cents != null && <circle cx={hoverX} cy={yScale(hoverPoint.new_price_cents)} r="5" fill="#4fc3f7" stroke="#1e2130" strokeWidth="2" />}{hoverPoint.amazon_price_cents != null && <circle cx={hoverX} cy={yScale(hoverPoint.amazon_price_cents)} r="5" fill="#81c784" stroke="#1e2130" strokeWidth="2" />}</>}
+                  </svg>
+                  <div style={{ minHeight: '2.5rem', textAlign: 'center', marginTop: '0.5rem' }}>
+                    {hoverPoint ? (<div style={{ color: '#ccc', fontSize: '0.85rem' }}><span style={{ color: '#999', marginRight: '1rem' }}>{new Date(hoverPoint.recorded_at).toLocaleDateString()}</span>{hoverPoint.new_price_cents != null && <span style={{ color: '#4fc3f7', marginRight: '1rem' }}>New: ${(hoverPoint.new_price_cents / 100).toFixed(2)}</span>}{hoverPoint.amazon_price_cents != null && <span style={{ color: '#81c784' }}>Amazon: ${(hoverPoint.amazon_price_cents / 100).toFixed(2)}</span>}</div>) : (<div style={{ display: 'flex', gap: '1.5rem', justifyContent: 'center' }}><span style={{ color: '#4fc3f7', fontSize: '0.85rem' }}>● New Price</span><span style={{ color: '#81c784', fontSize: '0.85rem' }}>● Amazon Price</span></div>)}
+                  </div>
+                  <div style={{ color: '#444', fontSize: '0.75rem', textAlign: 'center', marginTop: '0.25rem' }}>{points.length} data points · {new Date(points[0].recorded_at).toLocaleDateString()} – {new Date(points[points.length - 1].recorded_at).toLocaleDateString()}</div>
+                </>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+      </>
     );
   }
 
