@@ -1443,7 +1443,7 @@ export default function Home() {
                   const profit = b.fba_profit != null ? (b.fba_profit / 100).toFixed(2) : '—';
                   const sel = adminSelected.has(b.id);
                   return (
-                    <tr key={b.id} style={{ borderBottom: '1px solid #1e1e2e', background: sel ? 'rgba(108,92,231,0.15)' : 'transparent', cursor: b.asin ? 'pointer' : 'default' }} onDoubleClick={() => b.asin && openPriceHistory(b.asin)} title={b.asin ? 'Double-click to view price history' : ''}>
+                    <tr key={b.id} style={{ borderBottom: '1px solid #1e1e2e', background: sel ? 'rgba(108,92,231,0.15)' : 'transparent' }}>
                       <td style={{ padding: '0.5rem 0.5rem' }}>
                         <input type="checkbox" checked={sel} onChange={e => {
                           const next = new Set(adminSelected);
@@ -1452,7 +1452,13 @@ export default function Home() {
                         }} />
                       </td>
                       <td style={{ padding: '0.5rem', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#e0e0e0' }}>{b.title}</td>
-                      <td style={{ padding: '0.5rem', color: '#888', fontSize: '0.75rem', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{b.isbn}</td>
+                      <td style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>
+                        <span
+                          onDoubleClick={() => b.asin && openPriceHistory(b.asin)}
+                          style={{ color: b.asin ? '#74b9ff' : '#888', fontSize: '0.75rem', fontFamily: 'monospace', cursor: b.asin ? 'pointer' : 'default', userSelect: 'none' }}
+                          title={b.asin ? 'Double-click to view price history' : 'No ASIN'}
+                        >{b.isbn}</span>
+                      </td>
                       <td style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>
                         <a href={b.ebay_url} target="_blank" rel="noreferrer" style={{ color: '#74b9ff', textDecoration: 'none', fontSize: '0.78rem', marginRight: '0.5rem' }}>eBay</a>
                         {b.seller === 'booksrun' && b.seller_url && (
