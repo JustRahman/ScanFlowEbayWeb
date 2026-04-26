@@ -1465,12 +1465,10 @@ export default function Home() {
                         <span style={{ background: b.decision === 'BUY' ? '#00b894' : '#fdcb6e', color: b.decision === 'BUY' ? '#fff' : '#333', borderRadius: '0.3rem', padding: '0.15rem 0.5rem', fontWeight: 700, fontSize: '0.75rem' }}>{b.decision}</span>
                       </td>
                       <td style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>
-                        <button
-                          onDoubleClick={() => b.asin && openPriceHistory(b.asin)}
-                          disabled={!b.asin}
-                          title={b.asin ? 'Double-click to view price history' : 'No ASIN'}
-                          style={{ background: 'none', border: 'none', padding: 0, color: b.asin ? '#74b9ff' : '#888', fontSize: '0.75rem', fontFamily: 'monospace', cursor: b.asin ? 'pointer' : 'default', userSelect: 'none' }}
-                        >{b.isbn}</button>
+                        {b.asin && (
+                          <button onClick={() => openPriceHistory(b.asin!)} title="Price history" style={{ background: '#2a2a3e', border: '1px solid #444', color: '#74b9ff', borderRadius: '0.3rem', padding: '0.15rem 0.5rem', cursor: 'pointer', fontSize: '0.72rem', marginRight: '0.4rem' }}>📈</button>
+                        )}
+                        <span style={{ color: '#888', fontSize: '0.75rem', fontFamily: 'monospace' }}>{b.isbn}</span>
                       </td>
                       <td style={{ padding: '0.5rem', color: '#f0f0f0' }}>${buyP.toFixed(2)}</td>
                       <td style={{ padding: '0.5rem', color: '#aaa', fontSize: '0.78rem' }}>{b.sales_rank ? b.sales_rank.toLocaleString() : '—'}</td>
