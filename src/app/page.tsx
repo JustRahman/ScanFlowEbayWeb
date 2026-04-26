@@ -1423,11 +1423,13 @@ export default function Home() {
                     }} />
                   </th>
                   <th style={{ padding: '0.5rem' }}>Title</th>
-                  <th style={{ padding: '0.5rem' }}>ISBN</th>
                   <th style={{ padding: '0.5rem' }}>Links</th>
                   <th style={{ padding: '0.5rem' }}>Seller</th>
                   <th style={{ padding: '0.5rem' }}>Decision</th>
+                  <th style={{ padding: '0.5rem' }}>ISBN</th>
                   <th style={{ padding: '0.5rem' }}>Buy $</th>
+                  <th style={{ padding: '0.5rem' }}>Rank</th>
+                  <th style={{ padding: '0.5rem' }}>Drops</th>
                   <th style={{ padding: '0.5rem' }}>Amazon $</th>
                   <th style={{ padding: '0.5rem' }}>Mult.</th>
                   <th style={{ padding: '0.5rem' }}>FBA Profit</th>
@@ -1453,13 +1455,6 @@ export default function Home() {
                       </td>
                       <td style={{ padding: '0.5rem', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#e0e0e0' }}>{b.title}</td>
                       <td style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>
-                        <span
-                          onDoubleClick={() => b.asin && openPriceHistory(b.asin)}
-                          style={{ color: b.asin ? '#74b9ff' : '#888', fontSize: '0.75rem', fontFamily: 'monospace', cursor: b.asin ? 'pointer' : 'default', userSelect: 'none' }}
-                          title={b.asin ? 'Double-click to view price history' : 'No ASIN'}
-                        >{b.isbn}</span>
-                      </td>
-                      <td style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>
                         <a href={b.ebay_url} target="_blank" rel="noreferrer" style={{ color: '#74b9ff', textDecoration: 'none', fontSize: '0.78rem', marginRight: '0.5rem' }}>eBay</a>
                         {b.seller === 'booksrun' && b.seller_url && (
                           <a href={b.seller_url} target="_blank" rel="noreferrer" style={{ color: '#a29bfe', textDecoration: 'none', fontSize: '0.78rem' }}>BooksRun</a>
@@ -1469,7 +1464,16 @@ export default function Home() {
                       <td style={{ padding: '0.5rem' }}>
                         <span style={{ background: b.decision === 'BUY' ? '#00b894' : '#fdcb6e', color: b.decision === 'BUY' ? '#fff' : '#333', borderRadius: '0.3rem', padding: '0.15rem 0.5rem', fontWeight: 700, fontSize: '0.75rem' }}>{b.decision}</span>
                       </td>
+                      <td style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>
+                        <span
+                          onDoubleClick={() => b.asin && openPriceHistory(b.asin)}
+                          style={{ color: b.asin ? '#74b9ff' : '#888', fontSize: '0.75rem', fontFamily: 'monospace', cursor: b.asin ? 'pointer' : 'default', userSelect: 'none' }}
+                          title={b.asin ? 'Double-click to view price history' : 'No ASIN'}
+                        >{b.isbn}</span>
+                      </td>
                       <td style={{ padding: '0.5rem', color: '#f0f0f0' }}>${buyP.toFixed(2)}</td>
+                      <td style={{ padding: '0.5rem', color: '#aaa', fontSize: '0.78rem' }}>{b.sales_rank ? b.sales_rank.toLocaleString() : '—'}</td>
+                      <td style={{ padding: '0.5rem', color: '#aaa', fontSize: '0.78rem' }}>{b.sales_rank_drops_90 != null ? b.sales_rank_drops_90 : '—'}</td>
                       <td style={{ padding: '0.5rem', color: '#81c784' }}>{amP ? `$${amP.toFixed(2)}` : '—'}</td>
                       <td style={{ padding: '0.5rem', color: '#fdcb6e', fontWeight: 600 }}>{mult}x</td>
                       <td style={{ padding: '0.5rem', color: profit !== '—' && parseFloat(profit) > 0 ? '#00b894' : '#e17055' }}>{profit !== '—' ? `$${profit}` : '—'}</td>
