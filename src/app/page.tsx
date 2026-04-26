@@ -531,6 +531,23 @@ export default function Home() {
     setAdminSelected(new Set());
   }, []);
 
+  const rejectBooks = useCallback(async (ids: number[]) => {
+    if (ids.length === 0) return;
+    await Promise.all(ids.map(id =>
+      fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?id=eq.${id}`, {
+        method: 'PATCH',
+        headers: { ...HEADERS, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+        body: JSON.stringify({ decision: 'REJECT' }),
+      })
+    ));
+    setAdminBooks(prev => {
+      const next = prev.filter(b => !ids.includes(b.id));
+      setAdminPendingCount(next.length);
+      return next;
+    });
+    setAdminSelected(new Set());
+  }, []);
+
   // ── Fetch stat counts per seller (single lightweight query) ──
   const fetchStatCounts = useCallback(async () => {
     try {
@@ -1390,6 +1407,11 @@ export default function Home() {
               disabled={adminSelected.size === 0 || adminLoading}
               style={{ background: adminSelected.size > 0 ? '#6c5ce7' : '#333', border: 'none', color: '#fff', borderRadius: '0.4rem', padding: '0.4rem 0.9rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}
             >Publish Selected ({adminSelected.size})</button>
+            <button
+              onClick={() => rejectBooks(Array.from(adminSelected))}
+              disabled={adminSelected.size === 0 || adminLoading}
+              style={{ background: adminSelected.size > 0 ? '#d63031' : '#333', border: 'none', color: '#fff', borderRadius: '0.4rem', padding: '0.4rem 0.9rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}
+            >Reject Selected ({adminSelected.size})</button>
           </div>
         </div>
 
@@ -1478,7 +1500,8 @@ export default function Home() {
                       <td style={{ padding: '0.5rem', color: profit !== '—' && parseFloat(profit) > 0 ? '#00b894' : '#e17055' }}>{profit !== '—' ? `$${profit}` : '—'}</td>
                       <td style={{ padding: '0.5rem', color: '#888', fontSize: '0.75rem' }}>{new Date(b.scraped_at).toLocaleDateString()}</td>
                       <td style={{ padding: '0.5rem' }}>
-                        <button onClick={() => publishBooks([b.id])} style={{ background: '#00b894', border: 'none', color: '#fff', borderRadius: '0.3rem', padding: '0.25rem 0.6rem', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600 }}>Publish</button>
+                        <button onClick={() => publishBooks([b.id])} style={{ background: '#00b894', border: 'none', color: '#fff', borderRadius: '0.3rem', padding: '0.25rem 0.6rem', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600, marginRight: '0.3rem' }}>Publish</button>
+                        <button onClick={() => rejectBooks([b.id])} style={{ background: '#d63031', border: 'none', color: '#fff', borderRadius: '0.3rem', padding: '0.25rem 0.6rem', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600 }}>Reject</button>
                       </td>
                     </tr>
                   );
