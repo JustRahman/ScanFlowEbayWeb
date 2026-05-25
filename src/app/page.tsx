@@ -1060,6 +1060,7 @@ export default function Home() {
         namesearch: setAllNamesearch,
         zoombookscompany: setAllZoombooks,
         medicine: setAllMedicine,
+        pangobooks: setAllPangobooks,
       };
       setterMap[activeSeller](removeBook);
     } catch (error) {
