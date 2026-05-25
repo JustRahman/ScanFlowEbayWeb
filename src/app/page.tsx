@@ -14,6 +14,7 @@ const KP_TABLE = 'keepa_books';
 const NS_TABLE = 'namesearch_books';
 const ZM_TABLE = process.env.NEXT_PUBLIC_TURKISH === 'ZUBEYR' ? 'ebay_books_zubeyr' : 'ebay_books';
 const MINI_TABLE = 'minibooks';
+const PANGO_TABLE = 'pango_books';
 
 
 const HEADERS = {
@@ -365,6 +366,36 @@ export default function Home() {
     }
   }, []);
 
+  // ── Fetch PangoBooks ──
+  const fetchPangobooksBooks = useCallback(async (): Promise<Book[]> => {
+    try {
+      const [buyRes, reviewRes] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/${PANGO_TABLE}?select=*&order=scraped_at.desc&decision=eq.BUY`, { headers: HEADERS }),
+        fetch(`${SUPABASE_URL}/rest/v1/${PANGO_TABLE}?select=*&order=scraped_at.desc&decision=eq.REVIEW`, { headers: HEADERS }),
+      ]);
+      const buy = buyRes.ok ? await buyRes.json() : [];
+      const review = reviewRes.ok ? await reviewRes.json() : [];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return [...buy, ...review].map((b: any) => ({
+        ...b,
+        ebay_url: b.listing_url || '',
+        ebay_item_id: String(b.id),
+        shipping: 0,
+        category: '',
+        book_type: null,
+        weight_oz: null,
+        seller: 'pangobooks',
+        seller_url: b.listing_url || null,
+        displayed: 1,
+        display: 1,
+        _source: 'ebay' as const,
+      }));
+    } catch (error) {
+      console.error('Error fetching pangobooks:', error);
+      return [];
+    }
+  }, []);
+
   // ── Fetch eBay New books — books from ebay_books where condition is 'New' ──
   const fetchEbayNewBooks = useCallback(async (): Promise<Book[]> => {
     try {
@@ -555,7 +586,7 @@ export default function Home() {
   const fetchStatCounts = useCallback(async () => {
     try {
       const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      const sellers: Seller[] = ['booksrun', 'oneplanetbooks', 'thrift.books', 'betterworldbooks', 'greenworldbooks', 'greatbookprices1', 'betterworldbookswest', 'zuber', 'baystatebooks', 'Awesomebooksusa', 'goodwillswpa', 'goodwillbks', 'sensational-buys', 'pangobooks'];
+      const sellers: Seller[] = ['booksrun', 'oneplanetbooks', 'thrift.books', 'betterworldbooks', 'greenworldbooks', 'greatbookprices1', 'betterworldbookswest', 'zuber', 'baystatebooks', 'Awesomebooksusa', 'goodwillswpa', 'goodwillbks', 'sensational-buys'];
       const statDisplayFilter = process.env.NEXT_PUBLIC_TURKISH === 'HASAN' ? '&display=eq.1' : '';
       const results = await Promise.all(sellers.map(async (seller) => {
         const base = `${SUPABASE_URL}/rest/v1/${TABLE}?select=id&seller=eq.${encodeURIComponent(seller)}${statDisplayFilter}`;
@@ -679,6 +710,19 @@ export default function Home() {
         total: bfParseCount(medTotalRes), buy: bfParseCount(medBuyRes), review: bfParseCount(medReviewRes),
         reject: bfParseCount(medRejectRes), bought: bfParseCount(medBoughtRes), today: bfParseCount(medTodayRes),
       };
+      // Fetch pangobooks stats
+      const [pgTotalRes, pgBuyRes, pgReviewRes, pgRejectRes, pgBoughtRes, pgTodayRes] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/${PANGO_TABLE}?select=id`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${SUPABASE_URL}/rest/v1/${PANGO_TABLE}?select=id&decision=eq.BUY`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${SUPABASE_URL}/rest/v1/${PANGO_TABLE}?select=id&decision=eq.REVIEW`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${SUPABASE_URL}/rest/v1/${PANGO_TABLE}?select=id&decision=eq.REJECT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${SUPABASE_URL}/rest/v1/${PANGO_TABLE}?select=id&decision=eq.BOUGHT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${SUPABASE_URL}/rest/v1/${PANGO_TABLE}?select=id&scraped_at=gte.${twentyFourHoursAgo}`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+      ]);
+      counts.pangobooks = {
+        total: bfParseCount(pgTotalRes), buy: bfParseCount(pgBuyRes), review: bfParseCount(pgReviewRes),
+        reject: bfParseCount(pgRejectRes), bought: bfParseCount(pgBoughtRes), today: bfParseCount(pgTodayRes),
+      };
       setStatCounts(counts);
     } catch (error) {
       console.error('Error fetching stat counts:', error);
@@ -711,7 +755,7 @@ export default function Home() {
         fetchNamesearchBooks(),
         fetchZoombooksBooks(),
         fetchMedicineBooks(),
-        fetchBooksForSeller('pangobooks'),
+        fetchPangobooksBooks(),
       ]);
       setAllBooksrun(booksrun);
       setAllOneplanet(oneplanet);
@@ -797,7 +841,7 @@ export default function Home() {
     }
     loadAll();
     fetchStatCounts();
-  }, [fetchBooksForSeller, fetchBookfinderBooks, fetchAmazonBooks, fetchChristianbookBooks, fetchEbayNewBooks, fetchKeepaBooks, fetchNamesearchBooks, fetchStatCounts]);
+  }, [fetchBooksForSeller, fetchBookfinderBooks, fetchAmazonBooks, fetchChristianbookBooks, fetchEbayNewBooks, fetchKeepaBooks, fetchNamesearchBooks, fetchPangobooksBooks, fetchStatCounts]);
 
   // ── "Did you buy?" modal on tab return ──
   useEffect(() => {
