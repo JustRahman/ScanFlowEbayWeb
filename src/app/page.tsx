@@ -1114,6 +1114,7 @@ export default function Home() {
         zoombookscompany: setAllZoombooks,
         medicine: setAllMedicine,
         pangobooks: setAllPangobooks,
+        'second.sale': setAllSecondSale,
       };
       setterMap[activeSeller](removeBook);
     } catch (error) {
