@@ -1666,11 +1666,27 @@ export default function Home() {
         )}
         <p>{activeSeller === 'bookfinder' ? 'Books from BooksFinder' : activeSeller === 'amazon' ? 'Books from Amazon' : activeSeller === 'christianbook' ? 'Books from ChristianBook.com' : activeSeller === 'ebay_new' ? 'New books from eBay' : activeSeller === 'keepa' ? 'Top BUY books from Keepa' : activeSeller === 'namesearch' ? 'Books from NameSearch' : activeSeller === 'medicine' ? 'Medicine books' : `Books from ${SELLERS.find(s => s.id === activeSeller)?.label ?? activeSeller} on eBay`}</p>
 
+        {process.env.NEXT_PUBLIC_TURKISH === 'ZUBEYR' ? (
+          <div className="source-toggle-container">
+            <div className="source-toggle-group">
+              <div className="source-toggle">
+                {(['thrift.books', 'greenworldbooks', 'baystatebooks'] as Seller[]).map(id => { const s = SELLERS.find(x => x.id === id)!; const hasNew = (statCounts[s.id as ActiveSource]?.today ?? 0) > 0; return (
+                  <button key={s.id} className={`source-btn ${activeSeller === s.id ? 'active' : ''}`} style={hasNew ? { backgroundColor: '#e17055', color: '#fff', borderColor: '#e17055' } : {}} onClick={() => { setActiveSeller(s.id); setHasanFilter(true); }}>
+                    {s.label}
+                  </button>
+                ); })}
+                <button className={`source-btn ${activeSeller === 'zoombookscompany' ? 'active' : ''}`} style={(statCounts.zoombookscompany?.today ?? 0) > 0 ? { backgroundColor: '#e17055', color: '#fff', borderColor: '#e17055' } : {}} onClick={() => { setActiveSeller('zoombookscompany'); setHasanFilter(false); }}>
+                  ZoomBooks
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
         <div className="source-toggle-container">
           <div className="source-toggle-group">
             <div className="source-toggle-label">Main Sellers</div>
             <div className="source-toggle">
-              {SELLERS_MAIN.filter(id => (process.env.NEXT_PUBLIC_TURKISH !== 'HASAN' || ['booksrun', 'thrift.books', 'betterworldbooks', 'betterworldbookswest'].includes(id)) && (process.env.NEXT_PUBLIC_TURKISH !== 'ZUBEYR' || id !== 'pangobooks')).map(id => { const s = SELLERS.find(x => x.id === id)!; const hasNew = (statCounts[s.id as ActiveSource]?.today ?? 0) > 0; return (
+              {SELLERS_MAIN.filter(id => process.env.NEXT_PUBLIC_TURKISH !== 'HASAN' || ['booksrun', 'thrift.books', 'betterworldbooks', 'betterworldbookswest'].includes(id)).map(id => { const s = SELLERS.find(x => x.id === id)!; const hasNew = (statCounts[s.id as ActiveSource]?.today ?? 0) > 0; return (
                 <button key={s.id} className={`source-btn ${activeSeller === s.id ? 'active' : ''}`} style={hasNew ? { backgroundColor: '#e17055', color: '#fff', borderColor: '#e17055' } : {}} onClick={() => { setActiveSeller(s.id); setHasanFilter(true); }}>
                   {s.label}
                 </button>
@@ -1680,7 +1696,7 @@ export default function Home() {
           <div className="source-toggle-group">
             <div className="source-toggle-label">Other eBay</div>
             <div className="source-toggle">
-              {process.env.NEXT_PUBLIC_TURKISH !== 'HASAN' && process.env.NEXT_PUBLIC_TURKISH !== 'ZUBEYR' && SELLERS_OTHER_EBAY.map(id => { const s = SELLERS.find(x => x.id === id)!; const hasNew = (statCounts[s.id as ActiveSource]?.today ?? 0) > 0; return (
+              {process.env.NEXT_PUBLIC_TURKISH !== 'HASAN' && SELLERS_OTHER_EBAY.map(id => { const s = SELLERS.find(x => x.id === id)!; const hasNew = (statCounts[s.id as ActiveSource]?.today ?? 0) > 0; return (
                 <button key={s.id} className={`source-btn ${activeSeller === s.id ? 'active' : ''}`} style={hasNew ? { backgroundColor: '#e17055', color: '#fff', borderColor: '#e17055' } : {}} onClick={() => { setActiveSeller(s.id); setHasanFilter(true); }}>
                   {s.label}
                 </button>
@@ -1688,11 +1704,6 @@ export default function Home() {
               <button className={`source-btn ${activeSeller === 'ebay_new' ? 'active' : ''}`} style={(statCounts.ebay_new?.today ?? 0) > 0 ? { backgroundColor: '#e17055', color: '#fff', borderColor: '#e17055' } : {}} onClick={() => { setActiveSeller('ebay_new'); setHasanFilter(false); }}>
                 eBay New
               </button>
-              {process.env.NEXT_PUBLIC_TURKISH === 'ZUBEYR' && (
-                <button className={`source-btn ${activeSeller === 'zoombookscompany' ? 'active' : ''}`} style={(statCounts.zoombookscompany?.today ?? 0) > 0 ? { backgroundColor: '#e17055', color: '#fff', borderColor: '#e17055' } : {}} onClick={() => { setActiveSeller('zoombookscompany'); setHasanFilter(false); }}>
-                  ZoomBooks
-                </button>
-              )}
             </div>
           </div>
           <div className="source-toggle-group">
@@ -1701,17 +1712,17 @@ export default function Home() {
               <button className={`source-btn ${activeSeller === 'bookfinder' ? 'active' : ''}`} style={(statCounts.bookfinder?.today ?? 0) > 0 ? { backgroundColor: '#e17055', color: '#fff', borderColor: '#e17055' } : {}} onClick={() => { setActiveSeller('bookfinder'); setHasanFilter(true); }}>
                 BooksFinder
               </button>
-              {process.env.NEXT_PUBLIC_TURKISH !== 'ZUBEYR' && (
+              {process.env.NEXT_PUBLIC_TURKISH !== 'HASAN' && (
                 <button className={`source-btn ${activeSeller === 'christianbook' ? 'active' : ''}`} style={(statCounts.christianbook?.today ?? 0) > 0 ? { backgroundColor: '#e17055', color: '#fff', borderColor: '#e17055' } : {}} onClick={() => { setActiveSeller('christianbook'); setHasanFilter(false); }}>
                   ChristianBook
                 </button>
               )}
-              {process.env.NEXT_PUBLIC_TURKISH !== 'HASAN' && process.env.NEXT_PUBLIC_TURKISH !== 'ZUBEYR' && (
+              {process.env.NEXT_PUBLIC_TURKISH !== 'HASAN' && (
                 <button className={`source-btn ${activeSeller === 'keepa' ? 'active' : ''}`} style={(statCounts.keepa?.today ?? 0) > 0 ? { backgroundColor: '#e17055', color: '#fff', borderColor: '#e17055' } : {}} onClick={() => { setActiveSeller('keepa'); setHasanFilter(false); }}>
                   Keepa
                 </button>
               )}
-              {process.env.NEXT_PUBLIC_TURKISH !== 'HASAN' && process.env.NEXT_PUBLIC_TURKISH !== 'ZUBEYR' && (
+              {process.env.NEXT_PUBLIC_TURKISH !== 'HASAN' && (
                 <button className={`source-btn ${activeSeller === 'namesearch' ? 'active' : ''}`} style={(statCounts.namesearch?.today ?? 0) > 0 ? { backgroundColor: '#e17055', color: '#fff', borderColor: '#e17055' } : {}} onClick={() => { setActiveSeller('namesearch'); setHasanFilter(false); }}>
                   NameSearch
                 </button>
@@ -1719,6 +1730,7 @@ export default function Home() {
             </div>
           </div>
         </div>
+        )}
 
         <div className="stats">
           <div className="stat">
