@@ -22,7 +22,7 @@ const HEADERS = {
   'Authorization': `Bearer ${SUPABASE_KEY}`,
 };
 
-type Seller = 'booksrun' | 'oneplanetbooks' | 'thrift.books' | 'betterworldbooks' | 'greenworldbooks' | 'greatbookprices1' | 'betterworldbookswest' | 'zuber' | 'baystatebooks' | 'Awesomebooksusa' | 'goodwillswpa' | 'goodwillbks' | 'sensational-buys' | 'zoombookscompany' | 'pangobooks';
+type Seller = 'booksrun' | 'oneplanetbooks' | 'thrift.books' | 'betterworldbooks' | 'greenworldbooks' | 'greatbookprices1' | 'betterworldbookswest' | 'zuber' | 'baystatebooks' | 'Awesomebooksusa' | 'goodwillswpa' | 'goodwillbks' | 'sensational-buys' | 'zoombookscompany' | 'pangobooks' | 'second.sale';
 type ActiveSource = Seller | 'bookfinder' | 'amazon' | 'christianbook' | 'ebay_new' | 'keepa' | 'namesearch' | 'medicine';
 type DecisionFilter = 'all' | 'BUY' | 'REVIEW' | 'REJECT';
 type PriceFilter = 'all' | '0-5' | '5-10' | '10-20' | '20+';
@@ -94,6 +94,7 @@ const SELLERS: { id: Seller; label: string }[] = [
   { id: 'sensational-buys', label: 'Sensational Buys' },
   { id: 'zoombookscompany', label: 'ZoomBooks' },
   { id: 'pangobooks', label: 'PangoBooks' },
+  { id: 'second.sale', label: 'Second Sale' },
 ];
 const SELLERS_MAIN: Seller[] = ['booksrun', 'thrift.books', 'betterworldbooks', 'betterworldbookswest', 'greenworldbooks', 'baystatebooks', 'pangobooks'];
 const SELLERS_OTHER_EBAY: Seller[] = ['zuber', 'oneplanetbooks', 'greatbookprices1', 'Awesomebooksusa', 'goodwillswpa', 'goodwillbks', 'sensational-buys'];
@@ -185,6 +186,7 @@ export default function Home() {
   const [allZoombooks, setAllZoombooks] = useState<Book[]>([]);
   const [allMedicine, setAllMedicine] = useState<Book[]>([]);
   const [allPangobooks, setAllPangobooks] = useState<Book[]>([]);
+  const [allSecondSale, setAllSecondSale] = useState<Book[]>([]);
   const [unseenIds, setUnseenIds] = useState<Set<string>>(new Set());
 
   // ── Admin panel state (HASAN only) ──
@@ -225,6 +227,7 @@ export default function Home() {
     zoombookscompany: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
     medicine: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
     pangobooks: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
+    'second.sale': { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
   });
 
   // ── Fetch all BUY + REVIEW books for a seller (real-time, no rotation) ──
@@ -586,7 +589,7 @@ export default function Home() {
   const fetchStatCounts = useCallback(async () => {
     try {
       const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      const sellers: Seller[] = ['booksrun', 'oneplanetbooks', 'thrift.books', 'betterworldbooks', 'greenworldbooks', 'greatbookprices1', 'betterworldbookswest', 'zuber', 'baystatebooks', 'Awesomebooksusa', 'goodwillswpa', 'goodwillbks', 'sensational-buys'];
+      const sellers: Seller[] = ['booksrun', 'oneplanetbooks', 'thrift.books', 'betterworldbooks', 'greenworldbooks', 'greatbookprices1', 'betterworldbookswest', 'zuber', 'baystatebooks', 'Awesomebooksusa', 'goodwillswpa', 'goodwillbks', 'sensational-buys', 'second.sale'];
       const statDisplayFilter = process.env.NEXT_PUBLIC_TURKISH === 'HASAN' ? '&display=eq.1' : '';
       const results = await Promise.all(sellers.map(async (seller) => {
         const base = `${SUPABASE_URL}/rest/v1/${TABLE}?select=id&seller=eq.${encodeURIComponent(seller)}${statDisplayFilter}`;
@@ -733,7 +736,7 @@ export default function Home() {
   useEffect(() => {
     async function loadAll() {
       setLoading(true);
-      const [booksrun, oneplanet, thriftbooks, bwb, greenworld, greatbook, bwbwest, zuber, baystate, awesome, goodwill, goodwillbks, sensational, keepaBooks, bookfinder, amazonBooks, cbBooks, ebayNewBooks, namesearchBooks, zoombooksBooks, medicineBooks, pangobooks] = await Promise.all([
+      const [booksrun, oneplanet, thriftbooks, bwb, greenworld, greatbook, bwbwest, zuber, baystate, awesome, goodwill, goodwillbks, sensational, keepaBooks, bookfinder, amazonBooks, cbBooks, ebayNewBooks, namesearchBooks, zoombooksBooks, medicineBooks, pangobooks, secondSale] = await Promise.all([
         fetchBooksForSeller('booksrun'),
         fetchBooksForSeller('oneplanetbooks'),
         fetchBooksForSeller('thrift.books'),
@@ -756,6 +759,7 @@ export default function Home() {
         fetchZoombooksBooks(),
         fetchMedicineBooks(),
         fetchPangobooksBooks(),
+        fetchBooksForSeller('second.sale'),
       ]);
       setAllBooksrun(booksrun);
       setAllOneplanet(oneplanet);
@@ -779,6 +783,7 @@ export default function Home() {
       setAllZoombooks(zoombooksBooks);
       setAllMedicine(medicineBooks);
       setAllPangobooks(pangobooks);
+      setAllSecondSale(secondSale);
 
       // ── Track unseen books via localStorage (client only, ghost skips) ──
       const ghostMode = sessionStorage.getItem('scanflow_ghost') === '1';
@@ -805,6 +810,7 @@ export default function Home() {
           ...zoombooksBooks.map(b => `zm:${b.id}`),
           ...medicineBooks.map(b => `med:${b.id}`),
           ...pangobooks.map(b => `ebay:${b.id}`),
+          ...secondSale.map(b => `ebay:${b.id}`),
         ];
         const stored = localStorage.getItem('scanflow_seen');
         const seenSet = stored ? new Set<string>(JSON.parse(stored)) : new Set<string>();
@@ -892,6 +898,7 @@ export default function Home() {
           zoombookscompany: setAllZoombooks,
           medicine: setAllMedicine,
           pangobooks: setAllPangobooks,
+          'second.sale': setAllSecondSale,
         };
         const source: ActiveSource = buyModalBook._source === 'keepa' ? 'keepa' : buyModalBook._source === 'bookfinder' ? 'bookfinder' : buyModalBook._source === 'amazon' ? 'amazon' : buyModalBook._source === 'christianbook' ? 'christianbook' : buyModalBook._source === 'ebay_new' ? 'ebay_new' : buyModalBook._source === 'namesearch' ? 'namesearch' : buyModalBook._source === 'medicine' ? 'medicine' : buyModalBook._source === 'zoombookscompany' ? 'zoombookscompany' : (buyModalBook.seller as Seller);
         if (setterMap[source]) setterMap[source](removeBook);
@@ -937,9 +944,10 @@ export default function Home() {
       zoombookscompany: allZoombooks,
       medicine: allMedicine,
       pangobooks: allPangobooks,
+      'second.sale': allSecondSale,
     };
     return map[activeSeller];
-  }, [activeSeller, allBooksrun, allOneplanet, allThriftbooks, allBwb, allGreenworld, allGreatbook, allBwbWest, allZuber, allBaystate, allAwesome, allGoodwill, allGoodwillBks, allSensational, allBookfinder, allAmazon, allChristianbook, allEbayNew, allKeepa, allNamesearch, allZoombooks, allMedicine, allPangobooks]);
+  }, [activeSeller, allBooksrun, allOneplanet, allThriftbooks, allBwb, allGreenworld, allGreatbook, allBwbWest, allZuber, allBaystate, allAwesome, allGoodwill, allGoodwillBks, allSensational, allBookfinder, allAmazon, allChristianbook, allEbayNew, allKeepa, allNamesearch, allZoombooks, allMedicine, allPangobooks, allSecondSale]);
 
   // ── Seller counts (BUY count for each) ──
   const sellerCounts = useMemo(() => ({
@@ -965,6 +973,7 @@ export default function Home() {
     zoombookscompany: statCounts.zoombookscompany.buy,
     medicine: statCounts.medicine.buy,
     pangobooks: statCounts.pangobooks.buy,
+    'second.sale': statCounts['second.sale'].buy,
   }), [statCounts]);
 
   // ── Stats (from count queries, not full rows) ──
@@ -1670,7 +1679,7 @@ export default function Home() {
           <div className="source-toggle-container">
             <div className="source-toggle-group">
               <div className="source-toggle">
-                {(['thrift.books', 'greenworldbooks', 'baystatebooks'] as Seller[]).map(id => { const s = SELLERS.find(x => x.id === id)!; const hasNew = (statCounts[s.id as ActiveSource]?.today ?? 0) > 0; return (
+                {(['thrift.books', 'greenworldbooks', 'baystatebooks', 'second.sale'] as Seller[]).map(id => { const s = SELLERS.find(x => x.id === id)!; const hasNew = (statCounts[s.id as ActiveSource]?.today ?? 0) > 0; return (
                   <button key={s.id} className={`source-btn ${activeSeller === s.id ? 'active' : ''}`} style={hasNew ? { backgroundColor: '#e17055', color: '#fff', borderColor: '#e17055' } : {}} onClick={() => { setActiveSeller(s.id); setHasanFilter(true); }}>
                     {s.label}
                   </button>
