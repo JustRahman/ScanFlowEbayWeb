@@ -1680,7 +1680,7 @@ export default function Home() {
           <div className="source-toggle-container">
             <div className="source-toggle-group">
               <div className="source-toggle">
-                {(['thrift.books', 'greenworldbooks', 'baystatebooks', 'second.sale'] as Seller[]).map(id => { const s = SELLERS.find(x => x.id === id)!; const hasNew = (statCounts[s.id as ActiveSource]?.today ?? 0) > 0; return (
+                {(['booksrun', 'thrift.books', 'greenworldbooks', 'baystatebooks', 'second.sale'] as Seller[]).map(id => { const s = SELLERS.find(x => x.id === id)!; const hasNew = (statCounts[s.id as ActiveSource]?.today ?? 0) > 0; return (
                   <button key={s.id} className={`source-btn ${activeSeller === s.id ? 'active' : ''}`} style={hasNew ? { backgroundColor: '#e17055', color: '#fff', borderColor: '#e17055' } : {}} onClick={() => { setActiveSeller(s.id); setHasanFilter(true); }}>
                     {s.label}
                   </button>
