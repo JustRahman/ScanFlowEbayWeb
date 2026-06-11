@@ -152,6 +152,7 @@ export default function Home() {
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [decisionFilter, setDecisionFilter] = useState<DecisionFilter>('BUY');
+  const [zubeyrNewOnly, setZubeyrNewOnly] = useState(process.env.NEXT_PUBLIC_TURKISH === 'ZUBEYR');
   const [priceFilters, setPriceFilters] = useState<PriceFilter[]>(['all']);
   const [formatFilter, setFormatFilter] = useState<FormatFilter>('all');
   const [weightFilter, setWeightFilter] = useState<WeightFilter>('all');
@@ -982,6 +983,9 @@ export default function Home() {
   // ── Client-side filtering (decision + all other filters) ──
   const filteredBooks = useMemo(() => {
     return allBooks.filter(book => {
+      // ZUBEYR NEW-only filter
+      if (zubeyrNewOnly && process.env.NEXT_PUBLIC_TURKISH === 'ZUBEYR' && !isNewBook(book)) return false;
+
       // Decision filter (was server-side, now client-side)
       if (decisionFilter !== 'all' && book.decision !== decisionFilter) return false;
 
@@ -1045,7 +1049,7 @@ export default function Home() {
 
       return true;
     });
-  }, [allBooks, decisionFilter, searchQuery, priceFilters, formatFilter, weightFilter, minProfit, minRoi, hasanFilter]);
+  }, [allBooks, decisionFilter, searchQuery, priceFilters, formatFilter, weightFilter, minProfit, minRoi, hasanFilter, zubeyrNewOnly, isNewBook]);
 
   const sortedBooks = useMemo(() => {
     if (!roiSort) return filteredBooks;
@@ -1687,6 +1691,13 @@ export default function Home() {
                 ); })}
                 <button className={`source-btn ${activeSeller === 'zoombookscompany' ? 'active' : ''}`} style={(statCounts.zoombookscompany?.today ?? 0) > 0 ? { backgroundColor: '#e17055', color: '#fff', borderColor: '#e17055' } : {}} onClick={() => { setActiveSeller('zoombookscompany'); setHasanFilter(false); }}>
                   ZoomBooks
+                </button>
+                <button
+                  className={`source-btn ${zubeyrNewOnly ? 'active' : ''}`}
+                  style={zubeyrNewOnly ? { backgroundColor: '#00b894', color: '#fff', borderColor: '#00b894', fontWeight: 700 } : {}}
+                  onClick={() => setZubeyrNewOnly(v => !v)}
+                >
+                  NEW
                 </button>
               </div>
             </div>
