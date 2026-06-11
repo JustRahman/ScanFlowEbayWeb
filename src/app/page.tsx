@@ -980,6 +980,14 @@ export default function Home() {
   // ── Stats (from count queries, not full rows) ──
   const stats = useMemo(() => statCounts[activeSeller], [statCounts, activeSeller]);
 
+  const isNewBook = (book: Book) => {
+    const dateStr = book.evaluated_at || book.displayed_at;
+    if (!dateStr) return false;
+    const date = new Date(dateStr);
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    return date > twentyFourHoursAgo;
+  };
+
   // ── Client-side filtering (decision + all other filters) ──
   const filteredBooks = useMemo(() => {
     return allBooks.filter(book => {
@@ -1143,13 +1151,6 @@ export default function Home() {
     });
   };
 
-  const isNewBook = (book: Book) => {
-    const dateStr = book.evaluated_at || book.displayed_at;
-    if (!dateStr) return false;
-    const date = new Date(dateStr);
-    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    return date > twentyFourHoursAgo;
-  };
 
   const openPriceHistory = async (asin: string) => {
     setPriceHistoryAsin(asin);
