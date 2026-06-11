@@ -1049,7 +1049,7 @@ export default function Home() {
 
       return true;
     });
-  }, [allBooks, decisionFilter, searchQuery, priceFilters, formatFilter, weightFilter, minProfit, minRoi, hasanFilter, zubeyrNewOnly, isNewBook]);
+  }, [allBooks, decisionFilter, searchQuery, priceFilters, formatFilter, weightFilter, minProfit, minRoi, hasanFilter, zubeyrNewOnly]);
 
   const sortedBooks = useMemo(() => {
     if (!roiSort) return filteredBooks;
