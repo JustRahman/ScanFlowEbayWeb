@@ -850,8 +850,9 @@ export default function Home() {
     fetchStatCounts();
   }, [fetchBooksForSeller, fetchBookfinderBooks, fetchAmazonBooks, fetchChristianbookBooks, fetchEbayNewBooks, fetchKeepaBooks, fetchNamesearchBooks, fetchPangobooksBooks, fetchStatCounts]);
 
-  // ── "Did you buy?" modal on tab return ──
+  // ── "Did you buy?" modal on tab return (disabled for HASAN) ──
   useEffect(() => {
+    if (process.env.NEXT_PUBLIC_TURKISH === 'HASAN') return;
     const handleVisibility = () => {
       if (document.visibilityState === 'visible' && lastClickedBook.current) {
         setBuyModalBook(lastClickedBook.current);
