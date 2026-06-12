@@ -15,6 +15,7 @@ const NS_TABLE = 'namesearch_books';
 const ZM_TABLE = process.env.NEXT_PUBLIC_TURKISH === 'ZUBEYR' ? 'ebay_books_zubeyr' : 'ebay_books';
 const MINI_TABLE = 'minibooks';
 const PANGO_TABLE = 'pango_books';
+const FS_TABLE = 'ebay_books_fastselling';
 
 
 const HEADERS = {
@@ -23,7 +24,7 @@ const HEADERS = {
 };
 
 type Seller = 'booksrun' | 'oneplanetbooks' | 'thrift.books' | 'betterworldbooks' | 'greenworldbooks' | 'greatbookprices1' | 'betterworldbookswest' | 'zuber' | 'baystatebooks' | 'Awesomebooksusa' | 'goodwillswpa' | 'goodwillbks' | 'sensational-buys' | 'zoombookscompany' | 'pangobooks' | 'second.sale';
-type ActiveSource = Seller | 'bookfinder' | 'amazon' | 'christianbook' | 'ebay_new' | 'keepa' | 'namesearch' | 'medicine';
+type ActiveSource = Seller | 'bookfinder' | 'amazon' | 'christianbook' | 'ebay_new' | 'keepa' | 'namesearch' | 'medicine' | 'fastselling';
 type DecisionFilter = 'all' | 'BUY' | 'REVIEW' | 'REJECT';
 type PriceFilter = 'all' | '0-5' | '5-10' | '10-20' | '20+';
 type FormatFilter = 'all' | 'Paperback' | 'Hardcover';
@@ -188,6 +189,7 @@ export default function Home() {
   const [allMedicine, setAllMedicine] = useState<Book[]>([]);
   const [allPangobooks, setAllPangobooks] = useState<Book[]>([]);
   const [allSecondSale, setAllSecondSale] = useState<Book[]>([]);
+  const [allFastselling, setAllFastselling] = useState<Book[]>([]);
   const [unseenIds, setUnseenIds] = useState<Set<string>>(new Set());
 
   // ── Admin panel state (HASAN only) ──
@@ -229,6 +231,7 @@ export default function Home() {
     medicine: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
     pangobooks: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
     'second.sale': { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
+    fastselling: { total: 0, buy: 0, review: 0, reject: 0, bought: 0, today: 0 },
   });
 
   // ── Fetch all BUY + REVIEW books for a seller (real-time, no rotation) ──
@@ -396,6 +399,23 @@ export default function Home() {
       }));
     } catch (error) {
       console.error('Error fetching pangobooks:', error);
+      return [];
+    }
+  }, []);
+
+  // ── Fetch FastSelling books ──
+  const fetchFastsellingBooks = useCallback(async (): Promise<Book[]> => {
+    try {
+      const [buyRes, reviewRes] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/${FS_TABLE}?select=*&order=scraped_at.desc,id.desc&decision=eq.BUY`, { headers: HEADERS }),
+        fetch(`${SUPABASE_URL}/rest/v1/${FS_TABLE}?select=*&order=scraped_at.desc,id.desc&decision=eq.REVIEW`, { headers: HEADERS }),
+      ]);
+      const buy = buyRes.ok ? await buyRes.json() : [];
+      const review = reviewRes.ok ? await reviewRes.json() : [];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return [...buy, ...review].map((b: any) => ({ ...b, _source: 'ebay' as const }));
+    } catch (error) {
+      console.error('Error fetching fastselling:', error);
       return [];
     }
   }, []);
@@ -727,6 +747,20 @@ export default function Home() {
         total: bfParseCount(pgTotalRes), buy: bfParseCount(pgBuyRes), review: bfParseCount(pgReviewRes),
         reject: bfParseCount(pgRejectRes), bought: bfParseCount(pgBoughtRes), today: bfParseCount(pgTodayRes),
       };
+      // Fetch fastselling stats
+      const twentyFourHoursAgo2 = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const [fsTotalRes, fsBuyRes, fsReviewRes, fsRejectRes, fsBoughtRes, fsTodayRes] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/${FS_TABLE}?select=id`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${SUPABASE_URL}/rest/v1/${FS_TABLE}?select=id&decision=eq.BUY`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${SUPABASE_URL}/rest/v1/${FS_TABLE}?select=id&decision=eq.REVIEW`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${SUPABASE_URL}/rest/v1/${FS_TABLE}?select=id&decision=eq.REJECT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${SUPABASE_URL}/rest/v1/${FS_TABLE}?select=id&decision=eq.BOUGHT`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+        fetch(`${SUPABASE_URL}/rest/v1/${FS_TABLE}?select=id&scraped_at=gte.${twentyFourHoursAgo2}`, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': '0-0' } }),
+      ]);
+      counts.fastselling = {
+        total: bfParseCount(fsTotalRes), buy: bfParseCount(fsBuyRes), review: bfParseCount(fsReviewRes),
+        reject: bfParseCount(fsRejectRes), bought: bfParseCount(fsBoughtRes), today: bfParseCount(fsTodayRes),
+      };
       setStatCounts(counts);
     } catch (error) {
       console.error('Error fetching stat counts:', error);
@@ -737,7 +771,7 @@ export default function Home() {
   useEffect(() => {
     async function loadAll() {
       setLoading(true);
-      const [booksrun, oneplanet, thriftbooks, bwb, greenworld, greatbook, bwbwest, zuber, baystate, awesome, goodwill, goodwillbks, sensational, keepaBooks, bookfinder, amazonBooks, cbBooks, ebayNewBooks, namesearchBooks, zoombooksBooks, medicineBooks, pangobooks, secondSale] = await Promise.all([
+      const [booksrun, oneplanet, thriftbooks, bwb, greenworld, greatbook, bwbwest, zuber, baystate, awesome, goodwill, goodwillbks, sensational, keepaBooks, bookfinder, amazonBooks, cbBooks, ebayNewBooks, namesearchBooks, zoombooksBooks, medicineBooks, pangobooks, secondSale, fastsellingBooks] = await Promise.all([
         fetchBooksForSeller('booksrun'),
         fetchBooksForSeller('oneplanetbooks'),
         fetchBooksForSeller('thrift.books'),
@@ -761,6 +795,7 @@ export default function Home() {
         fetchMedicineBooks(),
         fetchPangobooksBooks(),
         fetchBooksForSeller('second.sale'),
+        fetchFastsellingBooks(),
       ]);
       setAllBooksrun(booksrun);
       setAllOneplanet(oneplanet);
@@ -785,6 +820,7 @@ export default function Home() {
       setAllMedicine(medicineBooks);
       setAllPangobooks(pangobooks);
       setAllSecondSale(secondSale);
+      setAllFastselling(fastsellingBooks);
 
       // ── Track unseen books via localStorage (client only, ghost skips) ──
       const ghostMode = sessionStorage.getItem('scanflow_ghost') === '1';
@@ -812,6 +848,7 @@ export default function Home() {
           ...medicineBooks.map(b => `med:${b.id}`),
           ...pangobooks.map(b => `ebay:${b.id}`),
           ...secondSale.map(b => `ebay:${b.id}`),
+          ...fastsellingBooks.map(b => `ebay:${b.id}`),
         ];
         const stored = localStorage.getItem('scanflow_seen');
         const seenSet = stored ? new Set<string>(JSON.parse(stored)) : new Set<string>();
@@ -848,7 +885,7 @@ export default function Home() {
     }
     loadAll();
     fetchStatCounts();
-  }, [fetchBooksForSeller, fetchBookfinderBooks, fetchAmazonBooks, fetchChristianbookBooks, fetchEbayNewBooks, fetchKeepaBooks, fetchNamesearchBooks, fetchPangobooksBooks, fetchStatCounts]);
+  }, [fetchBooksForSeller, fetchBookfinderBooks, fetchAmazonBooks, fetchChristianbookBooks, fetchEbayNewBooks, fetchKeepaBooks, fetchNamesearchBooks, fetchPangobooksBooks, fetchFastsellingBooks, fetchStatCounts]);
 
   // ── "Did you buy?" modal on tab return (disabled for HASAN) ──
   useEffect(() => {
@@ -901,6 +938,7 @@ export default function Home() {
           medicine: setAllMedicine,
           pangobooks: setAllPangobooks,
           'second.sale': setAllSecondSale,
+          fastselling: setAllFastselling,
         };
         const source: ActiveSource = buyModalBook._source === 'keepa' ? 'keepa' : buyModalBook._source === 'bookfinder' ? 'bookfinder' : buyModalBook._source === 'amazon' ? 'amazon' : buyModalBook._source === 'christianbook' ? 'christianbook' : buyModalBook._source === 'ebay_new' ? 'ebay_new' : buyModalBook._source === 'namesearch' ? 'namesearch' : buyModalBook._source === 'medicine' ? 'medicine' : buyModalBook._source === 'zoombookscompany' ? 'zoombookscompany' : (buyModalBook.seller as Seller);
         if (setterMap[source]) setterMap[source](removeBook);
@@ -947,9 +985,10 @@ export default function Home() {
       medicine: allMedicine,
       pangobooks: allPangobooks,
       'second.sale': allSecondSale,
+      fastselling: allFastselling,
     };
     return map[activeSeller];
-  }, [activeSeller, allBooksrun, allOneplanet, allThriftbooks, allBwb, allGreenworld, allGreatbook, allBwbWest, allZuber, allBaystate, allAwesome, allGoodwill, allGoodwillBks, allSensational, allBookfinder, allAmazon, allChristianbook, allEbayNew, allKeepa, allNamesearch, allZoombooks, allMedicine, allPangobooks, allSecondSale]);
+  }, [activeSeller, allBooksrun, allOneplanet, allThriftbooks, allBwb, allGreenworld, allGreatbook, allBwbWest, allZuber, allBaystate, allAwesome, allGoodwill, allGoodwillBks, allSensational, allBookfinder, allAmazon, allChristianbook, allEbayNew, allKeepa, allNamesearch, allZoombooks, allMedicine, allPangobooks, allSecondSale, allFastselling]);
 
   // ── Seller counts (BUY count for each) ──
   const sellerCounts = useMemo(() => ({
@@ -976,6 +1015,7 @@ export default function Home() {
     medicine: statCounts.medicine.buy,
     pangobooks: statCounts.pangobooks.buy,
     'second.sale': statCounts['second.sale'].buy,
+    fastselling: statCounts.fastselling.buy,
   }), [statCounts]);
 
   // ── Stats (from count queries, not full rows) ──
@@ -1723,7 +1763,7 @@ export default function Home() {
                 eBay New
               </button>
               {process.env.NEXT_PUBLIC_TURKISH === 'HASAN' && (
-                <button className={`source-btn`} onClick={() => {}}>
+                <button className={`source-btn ${activeSeller === 'fastselling' ? 'active' : ''}`} style={(statCounts.fastselling?.today ?? 0) > 0 ? { backgroundColor: '#e17055', color: '#fff', borderColor: '#e17055' } : {}} onClick={() => { setActiveSeller('fastselling'); setHasanFilter(false); }}>
                   FastSelling
                 </button>
               )}
