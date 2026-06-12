@@ -240,7 +240,7 @@ export default function Home() {
       const idFilter = process.env.NEXT_PUBLIC_TURKISH === 'HASAN'
         ? '&id=gte.188463'
         : process.env.NEXT_PUBLIC_TURKISH === 'ZUBEYR' ? '&id=gte.150180' : '';
-      const displayFilter = process.env.NEXT_PUBLIC_TURKISH === 'HASAN' ? '&display=eq.1' : '';
+      const displayFilter = '';
       const conditionFilter = seller === 'booksrun' ? '&condition=neq.Brand%20New' : '';
       const fetches: Promise<Response>[] = [
         fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=scraped_at.desc,id.desc&seller=eq.${encodeURIComponent(seller)}&decision=eq.BUY${idFilter}${displayFilter}${conditionFilter}`, {
@@ -611,7 +611,7 @@ export default function Home() {
     try {
       const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       const sellers: Seller[] = ['booksrun', 'oneplanetbooks', 'thrift.books', 'betterworldbooks', 'greenworldbooks', 'greatbookprices1', 'betterworldbookswest', 'zuber', 'baystatebooks', 'Awesomebooksusa', 'goodwillswpa', 'goodwillbks', 'sensational-buys', 'second.sale'];
-      const statDisplayFilter = process.env.NEXT_PUBLIC_TURKISH === 'HASAN' ? '&display=eq.1' : '';
+      const statDisplayFilter = '';
       const results = await Promise.all(sellers.map(async (seller) => {
         const base = `${SUPABASE_URL}/rest/v1/${TABLE}?select=id&seller=eq.${encodeURIComponent(seller)}${statDisplayFilter}`;
         const [totalRes, buyRes, reviewRes, rejectRes, boughtRes, todayRes] = await Promise.all([
@@ -1684,13 +1684,6 @@ export default function Home() {
       )}
       {/* Header */}
       <div className="header">
-        {process.env.NEXT_PUBLIC_TURKISH === 'HASAN' && (
-          <div style={{ textAlign: 'right', marginBottom: '0.5rem' }}>
-            <button onClick={() => { setAdminPwInput(''); setAdminPwError(false); setAdminPwModal(true); }} style={{ background: '#e17055', border: 'none', color: '#fff', borderRadius: '0.4rem', padding: '0.4rem 1rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}>
-              Admin Panel {adminPendingCount > 0 ? `(${adminPendingCount})` : ''}
-            </button>
-          </div>
-        )}
         {/* Admin password modal */}
         {adminPwModal && (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setAdminPwModal(false)}>
