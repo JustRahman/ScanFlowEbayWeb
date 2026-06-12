@@ -1168,6 +1168,7 @@ export default function Home() {
         medicine: setAllMedicine,
         pangobooks: setAllPangobooks,
         'second.sale': setAllSecondSale,
+        fastselling: setAllFastselling,
       };
       setterMap[activeSeller](removeBook);
     } catch (error) {
