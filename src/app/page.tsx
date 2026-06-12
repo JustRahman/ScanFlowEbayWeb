@@ -1718,7 +1718,7 @@ export default function Home() {
         <h1>{activeSeller === 'bookfinder' ? 'BooksFinder' : activeSeller === 'amazon' ? 'Amazon' : activeSeller === 'christianbook' ? 'ChristianBook' : activeSeller === 'ebay_new' ? 'eBay New' : activeSeller === 'keepa' ? 'Keepa' : activeSeller === 'namesearch' ? 'NameSearch' : activeSeller === 'medicine' ? 'Medicine' : (SELLERS.find(s => s.id === activeSeller)?.label ?? activeSeller)} Deals</h1>
         {process.env.NEXT_PUBLIC_TURKISH === 'ZUBEYR' && (
           <p style={{ fontSize: '1.3rem', fontWeight: 700, color: '#fdcb6e', margin: '0.2rem 0 0.5rem', letterSpacing: '0.02em' }}>
-            📅 Books update: 7 am and 7 pm
+            📅 Books update: 7:30 am and 7:30 pm
           </p>
         )}
         <p>{activeSeller === 'bookfinder' ? 'Books from BooksFinder' : activeSeller === 'amazon' ? 'Books from Amazon' : activeSeller === 'christianbook' ? 'Books from ChristianBook.com' : activeSeller === 'ebay_new' ? 'New books from eBay' : activeSeller === 'keepa' ? 'Top BUY books from Keepa' : activeSeller === 'namesearch' ? 'Books from NameSearch' : activeSeller === 'medicine' ? 'Medicine books' : `Books from ${SELLERS.find(s => s.id === activeSeller)?.label ?? activeSeller} on eBay`}</p>
